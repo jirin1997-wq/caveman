@@ -5,4 +5,5 @@ __pycache__/
 data/
 data-synth/
 models/
+models-synth/
 ledger.*.json

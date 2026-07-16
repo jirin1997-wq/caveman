@@ -21,7 +21,20 @@ Fáze 2: paper trading                             (živé ceny, fiktivní pení
 Fáze 3: live trading                              (reálné peníze, ruční odemčení)
 ```
 
-## Instalace
+## Nejrychlejší start — jeden příkaz
+
+```bash
+cd polymarket-bot
+bash run_phase1.sh
+```
+
+Skript sám vytvoří prostředí, nainstaluje závislosti, stáhne reálná data (20–40 min),
+natrénuje model a spustí backtest. Když spadne (výpadek sítě), spusťte ho znovu —
+naváže tam, kde skončil. Rychlý offline test bez internetu: `bash run_phase1.sh --synth`.
+
+Vyžaduje Python 3.9+ (funguje i se systémovým Pythonem na macOS).
+
+## Ruční instalace (alternativa)
 
 ```bash
 cd polymarket-bot
@@ -29,8 +42,6 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # a doplňte hodnoty (pro fáze 1–2 nic nepotřebujete)
 ```
-
-Vyžaduje Python 3.10+.
 
 ## Fáze 1 — data a trénink
 
