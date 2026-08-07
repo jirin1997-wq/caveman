@@ -1,0 +1,33 @@
+{
+  "name": "real-estate-scraper",
+  "version": "0.1.0",
+  "description": "Real estate scraper & analyzer for Czech properties (Praha + Brno)",
+  "type": "module",
+  "main": "backend/server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "node --watch backend/server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "scrape": "node backend/scrapers/run.js",
+    "scrape:sreality": "node backend/scrapers/sreality.js",
+    "db:migrate": "knex migrate:latest --knexfile backend/db/knexfile.js",
+    "db:seed": "knex seed:run --knexfile backend/db/knexfile.js",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "puppeteer": "^21.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "pg": "^8.11.3",
+    "knex": "^3.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "node-schedule": "^2.1.1",
+    "axios": "^1.6.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
