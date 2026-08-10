@@ -1,0 +1,116 @@
+{
+  "questions": [
+    {
+      "id": 1,
+      "category": "Navigation",
+      "difficulty": "easy",
+      "question": "Jaký je rozdíl mezi True North a Magnetic North?",
+      "options": [
+        "True North je geografický pól, Magnetic North je magnetický pól",
+        "Nemá žádný rozdíl",
+        "True North se mění každý rok, Magnetic North ne",
+        "True North je pro civilní letectví, Magnetic North pro vojenské"
+      ],
+      "correctAnswer": 0,
+      "explanation": "True North (skutečný sever) je geografický severní pól, zatímco Magnetic North (magnetický sever) je místo, kde magnetická jehla ukazuje. Liší se o tzv. deklinaci, která se s časem mění."
+    },
+    {
+      "id": 2,
+      "category": "Meteorology",
+      "difficulty": "medium",
+      "question": "Co je to frontální systém?",
+      "options": [
+        "Hranice mezi dvěma vzdušnými hmotami s různými vlastnostmi",
+        "Přední část bouřky",
+        "Srážky na začátku zimního období",
+        "Atmosférická vrstva nad oceánem"
+      ],
+      "correctAnswer": 0,
+      "explanation": "Frontální systém je přesně hranice mezi dvěma vzdušnými hmotami (teplou a chladnou), která vytváří typické meteorologické jevy."
+    },
+    {
+      "id": 3,
+      "category": "Aircraft Systems",
+      "difficulty": "medium",
+      "question": "Jaké jsou základní části hydraulického systému letadla?",
+      "options": [
+        "Pumpa, akumulátor, potrubí a akční prvky",
+        "Pouze motor a potrubí",
+        "Baterie a generátor",
+        "Kompressor a kondenzátor"
+      ],
+      "correctAnswer": 0,
+      "explanation": "Hydraulický systém se skládá z čerpadla (generuje tlak), akumulátoru (uskladňuje energii), potrubí (přenáší kapalinu) a akčních prvků (válce, motory)."
+    },
+    {
+      "id": 4,
+      "category": "Navigation",
+      "difficulty": "hard",
+      "question": "Jak se vypočítá drift úhel při letu v bočním větru?",
+      "options": [
+        "Pomocí kosinusového pravidla - drift = arcsin(wind speed × sin(wind angle) / true airspeed)",
+        "Jednoduše se odečte úhel větru od kurzu",
+        "Drift úhel se nikdy nevypočítá, jen se měří",
+        "Drift = wind speed × cos(heading)"
+      ],
+      "correctAnswer": 0,
+      "explanation": "Drift úhel je úhel mezi headingem a trackem. Vypočítá se trigonometricky z vektoru vlastní rychlosti a vektoru větru."
+    },
+    {
+      "id": 5,
+      "category": "Meteorology",
+      "difficulty": "easy",
+      "question": "Jaký je normální pokles teploty s výškou v troposféře?",
+      "options": [
+        "Asi 6,5°C na 1000 metrů",
+        "Asi 1°C na 1000 metrů",
+        "Asi 10°C na 1000 metrů",
+        "Teplota se s výškou nemění"
+      ],
+      "correctAnswer": 0,
+      "explanation": "Standardní pokles teploty (lapse rate) v troposféře je přibližně 6,5°C na 1 km nebo 2°C na 1000 stop."
+    },
+    {
+      "id": 6,
+      "category": "Aircraft Performance",
+      "difficulty": "medium",
+      "question": "Jaký faktor má NEJVĚTŠÍ vliv na vzletovou vzdálenost?",
+      "options": [
+        "Hmotnost letadla",
+        "Barva letadla",
+        "Výška pilota",
+        "Počet oken v kabině"
+      ],
+      "correctAnswer": 0,
+      "explanation": "Hmotnost letadla má zásadní vliv na vzletovou vzdálenost - čím těžší letadlo, tím delší vzdálenost potřebuje k dosažení rychlosti pro let."
+    },
+    {
+      "id": 7,
+      "category": "Regulations",
+      "difficulty": "easy",
+      "question": "Jaká je minimální viditelnost pro let VFR (Visual Flight Rules)?",
+      "options": [
+        "Minimálně 5 km",
+        "Minimálně 1 km",
+        "Minimálně 10 km",
+        "Viditelnost není podstatná pro VFR"
+      ],
+      "correctAnswer": 0,
+      "explanation": "Pro VFR let je vyžadována minimální viditelnost 5 km, aby pilot mohl bezpečně navigovat pomocí vizuálních orientačních bodů."
+    },
+    {
+      "id": 8,
+      "category": "Navigation",
+      "difficulty": "medium",
+      "question": "Co znamená zkratka NDB?",
+      "options": [
+        "Non-Directional Beacon - non-směrový maják",
+        "Navigation Data Base",
+        "National Direction Board",
+        "New Digital Beacon"
+      ],
+      "correctAnswer": 0,
+      "explanation": "NDB (Non-Directional Beacon) je pozemní navigační stanice vysílající rádiosignál, kterou letadlo může používat pro navigaci pomocí ADF přístroje."
+    }
+  ]
+}
