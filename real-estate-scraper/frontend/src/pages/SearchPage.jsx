@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import MapComponent from '../components/MapComponent';
 
 const API_URL = 'http://localhost:5000/api';
 
@@ -130,6 +131,12 @@ export default function SearchPage() {
         >
           Hledat
         </button>
+      </div>
+
+      {/* Map */}
+      <div className="mb-8">
+        <h2 className="text-xl font-bold mb-4">Mapa nemovitostí</h2>
+        <MapComponent city={city} />
       </div>
 
       {/* Listings */}

@@ -9,6 +9,7 @@ export default function DetailPage() {
   const { id } = useParams();
   const [listing, setListing] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
+  const [medians, setMedians] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +23,10 @@ export default function DetailPage() {
 
       const historyRes = await axios.get(`${API_URL}/listings/${id}/price-trend`);
       setPriceHistory(historyRes.data);
+
+      // Fetch medians for city comparison
+      const statsRes = await axios.get(`${API_URL}/stats/${res.data.city}/medians`);
+      setMedians(statsRes.data);
     } catch (err) {
       console.error('Error fetching listing:', err);
     } finally {
@@ -75,6 +80,30 @@ export default function DetailPage() {
             <p className="text-3xl font-bold">{listing.rooms || '-'}</p>
           </div>
         </div>
+
+        {/* Market Comparison */}
+        {medians && (
+          <div className="mb-8 p-4 bg-blue-50 rounded-lg">
+            <h2 className="text-lg font-bold mb-3">Porovnání s trhem</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-gray-600 text-sm">Cena vs medián města</p>
+                {(() => {
+                  const deviation = ((listing.price - medians.median_price) / medians.median_price * 100);
+                  return (
+                    <p className={`text-lg font-bold ${deviation > 5 ? 'text-red-600' : deviation < -5 ? 'text-green-600' : 'text-gray-700'}`}>
+                      {deviation > 0 ? '+' : ''}{deviation.toFixed(1)}% ({listing.price > medians.median_price ? 'dražší' : 'levnější'})
+                    </p>
+                  );
+                })()}
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm">Medián ceny v městě</p>
+                <p className="text-lg font-bold">{medians.median_price?.toLocaleString()} Kč</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Price History */}
         {priceHistory.length > 1 && (

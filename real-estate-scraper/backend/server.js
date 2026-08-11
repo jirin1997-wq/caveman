@@ -75,6 +75,52 @@ app.get('/api/listings/:id/price-trend', async (req, res) => {
   }
 });
 
+// Medians per city
+app.get('/api/stats/:city/medians', async (req, res) => {
+  try {
+    const { city } = req.params;
+
+    const stats = await db('listings')
+      .where('city', city)
+      .select(
+        db.raw('PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price'),
+        db.raw('PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_m2) as median_price_per_m2'),
+        db.raw('COUNT(*) as total_listings'),
+        db.raw('AVG(size_m2) as avg_size_m2')
+      )
+      .first();
+
+    res.json(stats || {
+      median_price: 0,
+      median_price_per_m2: 0,
+      total_listings: 0,
+      avg_size_m2: 0
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// All listings with coords (for map)
+app.get('/api/map/:city', async (req, res) => {
+  try {
+    const { city } = req.params;
+
+    const listings = await db('listings')
+      .where('city', city)
+      .whereNotNull('latitude')
+      .whereNotNull('longitude')
+      .select('id', 'title', 'price', 'price_per_m2', 'latitude', 'longitude', 'address')
+      .limit(200);
+
+    res.json(listings);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DB connection check
 app.listen(PORT, async () => {
   try {

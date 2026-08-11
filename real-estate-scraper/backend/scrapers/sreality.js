@@ -5,8 +5,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const CITIES = {
-  praha: 1,      // Sreality region ID pro Prahu
-  brno: 80       // Brno
+  praha: { regionId: 1, lat: 50.0755, lng: 14.4378 },
+  brno: { regionId: 80, lat: 49.1922, lng: 16.6113 }
 };
 
 async function scrapeSreality() {
@@ -18,8 +18,8 @@ async function scrapeSreality() {
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
-    for (const [city, regionId] of Object.entries(CITIES)) {
-      await scrapeCity(browser, city, regionId);
+    for (const [city, data] of Object.entries(CITIES)) {
+      await scrapeCity(browser, city, data);
     }
 
     console.log('✓ Sreality scraper finished');
@@ -30,9 +30,8 @@ async function scrapeSreality() {
   }
 }
 
-async function scrapeCity(browser, city, regionId) {
-  const baseUrl = `https://www.sreality.cz/api/cs/v2/estates?locality_region_id=${regionId}&category_main_cb=1&category_sub_cb=1&per_page=100`;
-
+async function scrapeCity(browser, city, cityData) {
+  const { regionId, lat, lng } = cityData;
   console.log(`📍 Scraping ${city}...`);
 
   try {
@@ -95,6 +94,7 @@ async function scrapeCity(browser, city, regionId) {
     for (const listing of listings) {
       try {
         const existing = await db('listings').where('url', listing.url).first();
+        const geo = generateGeoData(lat, lng);
 
         if (!existing) {
           // New listing
@@ -108,6 +108,8 @@ async function scrapeCity(browser, city, regionId) {
             rooms: listing.rooms,
             address: listing.title, // TODO: parse from Sreality detail page
             city: city,
+            latitude: geo.latitude,
+            longitude: geo.longitude,
             last_scraped: new Date()
           });
 
@@ -155,6 +157,17 @@ function extractRooms(title) {
     return parseInt(match[1]) + parseInt(match[2]);
   }
   return null;
+}
+
+// Generate dummy geo data (centered on city with small random offset)
+// TODO: Replace with real geocoding from Sreality API or Google Maps
+function generateGeoData(centerLat, centerLng) {
+  const offsetLat = (Math.random() - 0.5) * 0.1; // ~5km radius
+  const offsetLng = (Math.random() - 0.5) * 0.1;
+  return {
+    latitude: parseFloat((centerLat + offsetLat).toFixed(6)),
+    longitude: parseFloat((centerLng + offsetLng).toFixed(6))
+  };
 }
 
 // Run if called directly
