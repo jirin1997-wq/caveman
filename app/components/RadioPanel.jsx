@@ -12,11 +12,33 @@ export default function RadioPanel({ onTransmit }) {
 
   const { activeFrequency, frequencies, radioMessages, setActiveFrequency, userCallsign, userRole } = useATCStore();
 
-  // LiveATC stream URLs for Prague
+  // LiveATC stream URLs for Prague (multiple sources for redundancy)
   const liveATC = {
-    118.1: 'https://prd-sto-liveatc.cdnstream1.com/lkpr_twr', // Tower
-    121.85: 'https://prd-sto-liveatc.cdnstream1.com/lkpr_del', // Delivery
-    121.9: 'https://prd-sto-liveatc.cdnstream1.com/lkpr_gnd', // Ground
+    118.1: {
+      name: 'Tower',
+      streams: [
+        'https://prd-sto-liveatc.cdnstream1.com/lkpr_twr',
+        'https://fra-ah.stream.liveradio.cz:8000/lkpr_twr.mp3'
+      ]
+    },
+    121.85: {
+      name: 'Delivery',
+      streams: [
+        'https://prd-sto-liveatc.cdnstream1.com/lkpr_del'
+      ]
+    },
+    121.9: {
+      name: 'Ground',
+      streams: [
+        'https://prd-sto-liveatc.cdnstream1.com/lkpr_gnd'
+      ]
+    },
+    120.1: {
+      name: 'Approach',
+      streams: [
+        'https://prd-sto-liveatc.cdnstream1.com/lkpr_app'
+      ]
+    }
   };
 
   useEffect(() => {
@@ -27,9 +49,23 @@ export default function RadioPanel({ onTransmit }) {
   }, [activeFrequency]);
 
   const loadAudioStream = (freq) => {
-    // Note: LiveATC requires proper CORS configuration
-    // This is a placeholder - in production, you'd need a proxy or embedded player
-    console.log(`Loading LiveATC stream for ${freq} MHz`);
+    const stream = liveATC[freq];
+    if (!stream) return;
+
+    if (audioRef.current) {
+      // Try primary stream first
+      audioRef.current.src = stream.streams[0];
+
+      // Handle error by trying fallback streams
+      audioRef.current.onerror = () => {
+        console.log(`Primary stream failed for ${freq}, trying fallback...`);
+        if (stream.streams.length > 1) {
+          audioRef.current.src = stream.streams[1];
+        }
+      };
+    }
+
+    console.log(`Loaded stream for ${freq} MHz (${stream.name})`);
   };
 
   const toggleAudio = async () => {
@@ -88,27 +124,33 @@ export default function RadioPanel({ onTransmit }) {
       {/* Audio player */}
       <div className="mb-4 p-3 bg-gray-700 rounded">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold">Live ATC Audio</h4>
+          <h4 className="text-sm font-semibold">🎙️ Live ATC Audio</h4>
           <button
             onClick={toggleAudio}
-            className={`px-3 py-1 rounded text-sm ${
+            className={`px-3 py-1 rounded text-sm font-bold ${
               audioPlaying
-                ? 'bg-red-600 hover:bg-red-700'
+                ? 'bg-red-600 hover:bg-red-700 animate-pulse'
                 : 'bg-green-600 hover:bg-green-700'
             }`}
           >
-            {audioPlaying ? '⏸ Stop' : '▶ Listen'}
+            {audioPlaying ? '⏹ STOP' : '▶ LIVE'}
           </button>
         </div>
         <audio
           ref={audioRef}
-          src={liveATC[activeFrequency]}
           crossOrigin="anonymous"
           className="w-full text-xs"
         />
-        <p className="text-xs text-gray-400 mt-1">
-          {audioPlaying ? '🎙️ Recording live ATC traffic...' : 'Click to listen to live ATC'}
-        </p>
+        <div className="text-xs mt-2 space-y-1">
+          <p className={`font-semibold ${audioPlaying ? 'text-red-300 animate-pulse' : 'text-green-300'}`}>
+            {audioPlaying ? '● LIVE - Recording ATC traffic' : '○ Ready to stream'}
+          </p>
+          <p className="text-gray-400">
+            {liveATC[activeFrequency]?.name || 'Unknown Frequency'}
+            {' - '}
+            {activeFrequency} MHz
+          </p>
+        </div>
       </div>
 
       {/* Message input */}

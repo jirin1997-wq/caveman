@@ -35,6 +35,29 @@ app.get('/api/frequencies', (req, res) => {
   res.json(AIRPORT_CONFIG.frequencies);
 });
 
+app.get('/api/radio-status', (req, res) => {
+  res.json({
+    status: 'live',
+    aircraft: simulator.getAircraft().length,
+    messages: radio.getChannelMessages(AIRPORT_CONFIG.frequencies.Tower, 5),
+    timestamp: Date.now()
+  });
+});
+
+app.get('/api/atc-stream/:frequency', (req, res) => {
+  const frequency = parseFloat(req.params.frequency);
+  const messages = radio.getChannelMessages(frequency, 20);
+  res.json({
+    frequency,
+    frequencyName: Object.keys(AIRPORT_CONFIG.frequencies).find(
+      k => AIRPORT_CONFIG.frequencies[k] === frequency
+    ),
+    messages,
+    isLive: true,
+    timestamp: Date.now()
+  });
+});
+
 // WebSocket connection handling
 wss.on('connection', (ws) => {
   console.log('Client connected');

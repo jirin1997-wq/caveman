@@ -11,8 +11,10 @@ class AircraftSimulator {
   }
 
   async fetchRealAircraft() {
-    // Fetch real aircraft data from OpenSky Network API
-    // API is free and provides real-time ADS-B data
+    // Try multiple sources for real aircraft data
+    let success = false;
+
+    // Try OpenSky Network API first
     try {
       const bounds = this.airport.sectorBoundaries;
       // OpenSky API format: lamin,lamax,lomin,lomax
@@ -25,16 +27,72 @@ class AircraftSimulator {
         }
       });
 
-      if (response.data && response.data.states) {
+      if (response.data && response.data.states && response.data.states.length > 0) {
         this.parseOpenSkyData(response.data.states);
+        success = true;
+        console.log(`✓ Loaded ${response.data.states.length} real aircraft from OpenSky`);
       }
     } catch (error) {
-      console.log('OpenSky API unavailable, using simulation mode');
+      console.log('⚠ OpenSky API error:', error.message);
+    }
+
+    // Try ADSBexchange API as fallback
+    if (!success) {
+      try {
+        const bounds = this.airport.sectorBoundaries;
+        const centerLat = (bounds.north + bounds.south) / 2;
+        const centerLng = (bounds.east + bounds.west) / 2;
+        const url = `https://public-api.adsbexchange.com/v2/lat/${centerLat}/lon/${centerLng}/dist/50/`;
+
+        const response = await axios.get(url, { timeout: 5000 });
+        if (response.data && response.data.ac && response.data.ac.length > 0) {
+          this.parseADSBData(response.data.ac);
+          success = true;
+          console.log(`✓ Loaded ${response.data.ac.length} real aircraft from ADSBexchange`);
+        }
+      } catch (error) {
+        console.log('⚠ ADSBexchange API error:', error.message);
+      }
+    }
+
+    // Fallback to simulation if no real data available
+    if (!success) {
+      console.log('→ Using simulated aircraft (no live API available)');
       this.generateSimulatedAircraft();
     }
 
     // Refresh data every 10 seconds
-    setInterval(() => this.fetchRealAircraft(), 10000);
+    setTimeout(() => this.fetchRealAircraft(), 10000);
+  }
+
+  parseADSBData(states) {
+    // ADSBexchange format: {icao, call, lat, lon, alt_baro, gs, track, ...}
+    this.aircraft.clear();
+
+    states.forEach((state) => {
+      if (!state.lat || !state.lon) return;
+
+      const aircraft = {
+        id: state.icao || `UNKNOWN_${Math.random()}`,
+        callsign: (state.call || 'UNKNOWN').trim(),
+        origin: 'Live ADS-B',
+        position: {
+          lat: state.lat,
+          lng: state.lon
+        },
+        altitude: state.alt_baro || 0, // feet
+        velocity: (state.gs || 0) / 1.944, // knots to m/s
+        heading: state.track || 0, // degrees
+        verticalRate: (state.baro_rate || 0) / 60, // feet/min to m/s
+        onGround: (state.alt_baro || 0) === 0,
+        timestamp: Date.now()
+      };
+
+      aircraft.icon = aircraft.onGround ? '✈️' : '🛩️';
+      aircraft.color = this.getAircraftColor(aircraft.altitude);
+
+      this.aircraft.set(aircraft.id, aircraft);
+    });
   }
 
   parseOpenSkyData(states) {
