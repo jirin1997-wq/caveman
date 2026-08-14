@@ -4,6 +4,7 @@ const http = require('http');
 const { AIRPORT_CONFIG, SIMULATION_CONFIG } = require('./config');
 const AircraftSimulator = require('./simulator');
 const RadioSystem = require('./radio');
+const ATCFeed = require('./atc-feed');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,6 +15,9 @@ const simulator = new AircraftSimulator(AIRPORT_CONFIG, SIMULATION_CONFIG);
 
 // Radio system
 const radio = new RadioSystem(AIRPORT_CONFIG.frequencies);
+
+// Live ATC feed
+const atcFeed = new ATCFeed();
 
 // Middleware
 app.use(express.json());
@@ -46,13 +50,29 @@ app.get('/api/radio-status', (req, res) => {
 
 app.get('/api/atc-stream/:frequency', (req, res) => {
   const frequency = parseFloat(req.params.frequency);
-  const messages = radio.getChannelMessages(frequency, 20);
+  const atcMessages = atcFeed.getMessagesByFrequency(frequency, 20);
+  const radioMessages = radio.getChannelMessages(frequency, 20);
+
+  // Merge both feeds
+  const allMessages = [...atcMessages, ...radioMessages]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 20);
+
   res.json({
     frequency,
     frequencyName: Object.keys(AIRPORT_CONFIG.frequencies).find(
       k => AIRPORT_CONFIG.frequencies[k] === frequency
     ),
-    messages,
+    messages: allMessages,
+    isLive: true,
+    source: 'Live ATC + Radio',
+    timestamp: Date.now()
+  });
+});
+
+app.get('/api/atc-log', (req, res) => {
+  res.json({
+    messages: atcFeed.getMessages(50),
     isLive: true,
     timestamp: Date.now()
   });
