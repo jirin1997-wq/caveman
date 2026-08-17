@@ -35,6 +35,17 @@ Co v aplikaci **není**: žádný generátor „realistických" ATC hlášek, ž
 
 ## Spuštění
 
+### Možnost 1: Desktop appka (nejjednoduší)
+
+```bash
+npm install
+npm run build:electron
+```
+
+Vytvoří soubor `dist/ATC-Radio-*.exe` (Windows), `.dmg` (Mac) nebo `.AppImage` (Linux). Stáhneš a spustíš — nic víc.
+
+### Možnost 2: Web dev (pro vývoj)
+
 ```bash
 npm install
 npm run dev
@@ -44,6 +55,15 @@ npm run dev
 - backend → http://localhost:3001
 
 Otevři `localhost:3000`, nahoře vyber letiště, vpravo zapni `▶ poslouchat`.
+
+### Možnost 3: Electron dev (s hot reload)
+
+```bash
+npm install
+npm run dev:electron
+```
+
+Otevře okno Electronu s live reloadu během vývoje.
 
 ---
 
