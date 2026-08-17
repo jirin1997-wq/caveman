@@ -1,96 +1,133 @@
 # 🏠 Reality Scout
 
-Real estate scraper & analyzer pro české nemovitosti (Praha + Brno). Denně stahuje inzeráty, sleduje ceny, vyhodnocuje dispozice.
+Srovnávač nemovitostí pro Prahu a Brno. Stahuje inzeráty, počítá cenu za m²,
+porovnává ji se srovnatelnými nemovitostmi a sleduje vývoj trhu v čase.
 
-## Co umí
+## Co to umí
 
-- 🔍 **Scraper**: Automaticky stahuje inzeráty z Sreality, iDNES, developerů
-- 📊 **Historie cen**: Sleduje vývoj cen v čase (graf)
-- 💰 **Cena/m²**: Počítá a filtruje cenu za metr čtvereční
-- 🏢 **Dispozice**: Filtruje podle počtu pokojů, velikosti, lokality
-- 🔔 **Denní updaty**: Cron job spouští scraper každou noc v 2:00 AM
-- 🌐 **Web app**: Interaktivní rozhraní na procházení a filtrování
+**Vyhledávání a filtrování**
+- Novostavby / byty
+- Dispozice (1+kk až 6+1, atypické)
+- Cenové rozmezí v Kč i v Kč/m², s histogramem rozložení trhu
+- Plocha, typ stavby (cihla / panel / smíšená), stav objektu
+- Vybavenost — balkón, terasa, lodžie, sklep, výtah, garáž, parkování
+- Lokalita, zdroj inzerátu, rok dokončení, jen zlevněné, jen činžovní domy
 
-## Tech Stack
+**Vyhodnocení ceny**
+- **Cenový rating** — pětistupňová škála od „Výborná cena" po „Vysoká cena".
+  Porovnává cenu za m² s mediánem srovnatelných nemovitostí. Srovnávací
+  skupina se vybírá od nejpodrobnější (stejná čtvrť + dispozice) k nejširší,
+  podle toho, kde je dost dat. U každé nemovitosti je vidět, vůči čemu se měří.
+- **Hrubý výnos z pronájmu** (% p.a.) — roční nájem podle referenčních
+  nájmů v lokalitě dělený kupní cenou. Nízký výnos = drahé vůči nájemnímu trhu.
+- **Doba na trhu** — jak dlouho inzerát visí.
 
-- **Backend**: Node.js + Express + PostgreSQL
-- **Scraper**: Puppeteer (JS weby) + Cheerio (HTML parse)
-- **Frontend**: React + Vite + Tailwind CSS
-- **Databáze**: PostgreSQL + Knex migrations
-- **Deploy**: Docker Compose
+**Přehled trhu**
+- Mapa s body obarvenými podle cenového ratingu
+- Vývoj mediánu ceny za m² za posledních 24 měsíců
+- Historie ceny konkrétního inzerátu včetně zlevnění
+
+**Kalkulačka**
+- Měsíční splátka, celkem zaplacené úroky, LTV s upozorněním nad 80 %
+- Dostupnost: DSTI a kolik let čistého příjmu nemovitost stojí
 
 ## Rychlý start
 
-### 1. Příprava
 ```bash
-cd real-estate-scraper
 cp .env.example .env
 npm install
 cd frontend && npm install && cd ..
-```
 
-### 2. Spusť databázi
-```bash
+# Databáze — buď Docker…
 npm run docker:up
-sleep 5
-npm run db:migrate
-```
 
-### 3. Spusť backend + frontend dev servery
-```bash
+# …nebo lokální PostgreSQL:
+#   createuser realestateuser -P --createdb
+#   createdb realestate_db -O realestateuser
+
+npm run db:migrate
+npm run db:seed        # demo data, ať je co prohlížet
 npm run dev
 ```
 
-- Backend: `http://localhost:5000`
-- Frontend: `http://localhost:3000`
+- Web: http://localhost:3000
+- API: http://localhost:5000
 
-### 4. Ruční scrape (test)
+> `npm run db:seed` naplní databázi **vymyšlenými** daty v realistických řádech.
+> Slouží k vývoji a prohlídce UI. Reálná data přinese scraper.
+
+## Stažení reálných dat
+
 ```bash
-npm run scrape:sreality
+npm run scrape          # scrape + snímek trhu (co dělá i noční cron)
+npm run scrape:sreality # jen Sreality
+npm run snapshot        # jen přepočet snímku trhu
 ```
+
+Denní běh ve 2:00 zajišťuje `backend/cron.js`. Na serveru ho spusť jako
+službu (`node backend/cron.js`) nebo nech plánovat systémovým cronem.
+
+## Testy
+
+```bash
+npm test
+```
+
+Pokrývají parsování dat ze zdrojů (`backend/scrapers/normalize.js`) a
+vyhodnocovací logiku (`backend/lib/pricing.js`) — dvě místa, kde se chyba
+projeví jako tiše špatné číslo, ne jako pád.
 
 ## Struktura
 
 ```
 backend/
-├── server.js          # Express API
+├── server.js              Express API
+├── lib/
+│   ├── pricing.js         Cenový rating, výnos, stáří inzerátu
+│   └── filters.js         Překlad filtrů na SQL
 ├── scrapers/
-│   ├── sreality.js    # Sreality scraper
-│   ├── idnes.js       # (TODO) iDNES scraper
-│   └── developers.js  # (TODO) Developer weby
+│   ├── normalize.js       Čisté parsovací funkce (testované)
+│   ├── store.js           Ukládání + historie cen
+│   └── sreality.js        Sreality přes veřejné JSON API
+├── jobs/snapshot.js       Denní snímek mediánů trhu
 ├── db/
-│   ├── knexfile.js
-│   └── migrations/    # DB schema
-└── cron.js            # Denní scheduling
+│   ├── migrations/        Schéma
+│   └── seeds/             Demo data
+└── cron.js                Denní plán
 
-frontend/
-├── src/
-│   ├── App.jsx        # Main app
-│   ├── pages/
-│   │   ├── SearchPage.jsx  # Seznam + filtry
-│   │   └── DetailPage.jsx  # Detail inzerátu + graf
-│   └── index.css      # Tailwind
-└── vite.config.js
+frontend/src/
+├── pages/
+│   ├── SearchPage.jsx     Sidebar + dlaždice / seznam / mapa
+│   └── DetailPage.jsx     Detail, srovnání s trhem, kalkulačka
+├── components/
+│   ├── FilterSidebar.jsx
+│   ├── HistogramSlider.jsx
+│   ├── ListingCard.jsx
+│   ├── PriceRatingBar.jsx
+│   ├── MapComponent.jsx
+│   ├── TrendChart.jsx
+│   └── MortgageCalculator.jsx
+└── lib/{api,format}.js
 ```
 
-## API Endpointy
+## API
 
-- `GET /api/health` — Health check
-- `GET /api/listings?city=praha&minPrice=1000000&maxPrice=5000000` — Seznam s filtry
-- `GET /api/listings/:id` — Detail inzerátu + ceny
-- `GET /api/listings/:id/price-trend` — Graf ceny (JSON)
+| Endpoint | Co vrací |
+|---|---|
+| `GET /api/listings` | Seznam s filtry, řazením a stránkováním |
+| `GET /api/listings/:id` | Detail včetně historie ceny a srovnání |
+| `GET /api/facets` | Počty u voleb filtrů + histogramy pro slidery |
+| `GET /api/map/:city` | Body na mapu (stejné filtry jako seznam) |
+| `GET /api/stats/:city/medians` | Mediány trhu |
+| `GET /api/stats/:city/trend` | Časová řada mediánů |
+| `POST /api/calculator/mortgage` | Splátka, úroky, LTV |
+| `POST /api/calculator/affordability` | DSTI a dostupnost |
 
-## Příští kroky (Fáze 2+)
+## Co ještě chybí
 
-- [ ] iDNES reality scraper
-- [ ] Developer weby (Orco, Trigema, Ekospol…)
-- [ ] Detekce podezřelých cen (ML)
-- [ ] Notifikace na pokles ceny
-- [ ] Mobile app / PWA
-- [ ] Deploy na VPS
-
-## Notes
-
-- Scraper nyní parsuje jen Sreality (ostatní TODO)
-- Databáze resetuje pomocí `docker-compose down -v`
-- Frontend proxy předává API požadavky na backend (vite.config.js)
+- [ ] iDNES reality, Bezrealitky
+- [ ] Weby developerů (Trigema, Central Group, Ekospol…)
+- [ ] Reálné referenční nájmy místo odhadu z kupních cen
+- [ ] Hlídací pes — upozornění na nový nebo zlevněný inzerát
+- [ ] Data z katastru pro realizované (ne nabídkové) ceny
+- [ ] Nasazení

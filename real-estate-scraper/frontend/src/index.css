@@ -3,7 +3,63 @@
 @tailwind utilities;
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dvojitý posuvník: dva překryté <input type=range>, viditelné jen úchyty.
+   Nativní dráha je skrytá, protože ji kreslíme sami pod histogramem. */
+.range-thumb {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.range-thumb:focus {
+  outline: none;
+}
+
+.range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid #0f172a;
+  cursor: grab;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.2);
+}
+
+.range-thumb::-webkit-slider-thumb:active {
+  cursor: grabbing;
+}
+
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid #0f172a;
+  cursor: grab;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.2);
+}
+
+.range-thumb:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgb(15 23 42 / 0.15);
+}
+
+/* Leaflet popup sladěný se zbytkem UI */
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
 }
