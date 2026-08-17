@@ -3,8 +3,13 @@
 // Design rule: if no source answers, say so. Never substitute invented
 // aircraft for missing data — a fake plane on a radar screen is worse than an
 // empty screen, because you cannot tell it apart from a real one.
+//
+// The same rule applies field by field: aircraft type, registration and
+// operator come from the receiver network's database. When a transponder or
+// database has no value, the field stays null.
 
 const axios = require('axios');
+const { describeCategory, describeSquawk, wakeClass } = require('./aircraft-meta');
 
 const UA = 'atc-radio-app/2.0 (personal, non-commercial)';
 const NM_PER_KM = 0.539957;
@@ -13,29 +18,78 @@ function get(url, opts = {}) {
   return axios.get(url, { timeout: 8000, headers: { 'User-Agent': UA }, ...opts });
 }
 
-function colorForAltitude(ft) {
+function colorForAltitude(ft, onGround) {
+  if (onGround) return '#c07cd8';
   if (ft < 2000) return '#ff6b6b';
   if (ft < 10000) return '#ffd93d';
   if (ft < 25000) return '#6bcf7f';
   return '#4d96ff';
 }
 
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 function normalize(raw) {
+  const onGround = !!raw.onGround;
+  const altitude = num(raw.alt) ?? 0;
+
   const out = {
     id: raw.id,
     callsign: (raw.callsign || '').trim() || raw.id,
     position: { lat: raw.lat, lng: raw.lon },
-    altitude: Number(raw.alt) || 0, // feet
-    velocity: Number(raw.gs) || 0, // knots
-    heading: Number(raw.track) || 0, // degrees true
-    verticalRate: Number(raw.vs) || 0, // feet/min
-    onGround: !!raw.onGround,
+    altitude,
+    velocity: num(raw.gs) ?? 0,
+    heading: num(raw.track) ?? 0,
+    verticalRate: num(raw.vs) ?? 0,
+    onGround,
     squawk: raw.squawk || null,
+
+    // identity — null when the source has no entry, never invented
+    type: raw.type || null, // ICAO type code, e.g. "A21N"
+    typeName: raw.desc || null, // e.g. "AIRBUS A-321neo"
+    registration: raw.reg || null, // e.g. "OK-NEP"
+    operator: raw.operator || null,
+    year: raw.year || null,
+    category: raw.category || null,
+
     source: raw.source,
     timestamp: Date.now(),
   };
-  out.color = colorForAltitude(out.altitude);
+
+  out.categoryName = describeCategory(out.category);
+  out.wake = wakeClass(out.category);
+  out.squawkMeaning = describeSquawk(out.squawk);
+  out.color = colorForAltitude(altitude, onGround);
   return out;
+}
+
+// readsb/tar1090 JSON is shared by adsb.lol and airplanes.live
+function fromReadsb(list, source) {
+  return (list || [])
+    .filter((a) => a.lat != null && a.lon != null)
+    .map((a) =>
+      normalize({
+        id: a.hex,
+        callsign: a.flight,
+        lat: a.lat,
+        lon: a.lon,
+        alt: a.alt_baro === 'ground' ? 0 : a.alt_baro,
+        gs: a.gs,
+        track: a.track ?? a.true_heading,
+        vs: a.baro_rate ?? a.geom_rate,
+        onGround: a.alt_baro === 'ground',
+        squawk: a.squawk,
+        type: a.t,
+        desc: a.desc,
+        reg: a.r,
+        operator: a.ownOp,
+        year: a.year,
+        category: a.category,
+        source,
+      })
+    );
 }
 
 // --- sources -----------------------------------------------------------
@@ -43,41 +97,13 @@ function normalize(raw) {
 async function fromAdsbLol(lat, lon, radiusKm) {
   const nm = Math.min(250, Math.round(radiusKm * NM_PER_KM));
   const { data } = await get(`https://api.adsb.lol/v2/point/${lat}/${lon}/${nm}`);
-  return (data.ac || []).map((a) =>
-    normalize({
-      id: a.hex,
-      callsign: a.flight,
-      lat: a.lat,
-      lon: a.lon,
-      alt: a.alt_baro === 'ground' ? 0 : a.alt_baro,
-      gs: a.gs,
-      track: a.track,
-      vs: a.baro_rate,
-      onGround: a.alt_baro === 'ground',
-      squawk: a.squawk,
-      source: 'adsb.lol',
-    })
-  );
+  return fromReadsb(data.ac, 'adsb.lol');
 }
 
 async function fromAirplanesLive(lat, lon, radiusKm) {
   const nm = Math.min(250, Math.round(radiusKm * NM_PER_KM));
   const { data } = await get(`https://api.airplanes.live/v2/point/${lat}/${lon}/${nm}`);
-  return (data.ac || []).map((a) =>
-    normalize({
-      id: a.hex,
-      callsign: a.flight,
-      lat: a.lat,
-      lon: a.lon,
-      alt: a.alt_baro === 'ground' ? 0 : a.alt_baro,
-      gs: a.gs,
-      track: a.track,
-      vs: a.baro_rate,
-      onGround: a.alt_baro === 'ground',
-      squawk: a.squawk,
-      source: 'airplanes.live',
-    })
-  );
+  return fromReadsb(data.ac, 'airplanes.live');
 }
 
 async function fromOpenSky(lat, lon, radiusKm) {
@@ -87,7 +113,8 @@ async function fromOpenSky(lat, lon, radiusKm) {
     `https://opensky-network.org/api/states/all` +
     `?lamin=${lat - dLat}&lamax=${lat + dLat}&lomin=${lon - dLon}&lomax=${lon + dLon}`;
   const { data } = await get(url);
-  // state vector layout is positional and documented by OpenSky
+  // OpenSky state vectors are positional; it carries no type/registration,
+  // so those fields legitimately stay null here.
   return (data.states || [])
     .filter((s) => s[5] != null && s[6] != null)
     .map((s) =>
@@ -123,7 +150,7 @@ async function fetchTraffic(lat, lon, radiusKm = 90) {
     try {
       const aircraft = await fn(lat, lon, radiusKm);
       if (aircraft.length) return { live: true, source: name, aircraft };
-      errors.push(`${name}: 0 aircraft`);
+      errors.push(`${name}: 0 letadel`);
     } catch (err) {
       errors.push(`${name}: ${err.code || err.message}`);
     }
@@ -131,4 +158,4 @@ async function fetchTraffic(lat, lon, radiusKm = 90) {
   return { live: false, source: null, aircraft: [], errors };
 }
 
-module.exports = { fetchTraffic };
+module.exports = { fetchTraffic, fromReadsb, normalize };

@@ -34,6 +34,41 @@ function http(url, extra = {}) {
 }
 
 /**
+ * Pull feed ids + labels out of a LiveATC search page.
+ * Pure function so it can be tested against a saved page without network.
+ */
+function parseFeedPage(html) {
+  html = String(html);
+
+  // Feed IDs appear both as .pls links and as hlisten mount params.
+  const ids = new Set();
+  for (const m of html.matchAll(/\/play\/([a-z0-9_+-]+)\.pls/gi)) ids.add(m[1].toLowerCase());
+  for (const m of html.matchAll(/mount=([a-z0-9_+-]+)/gi)) ids.add(m[1].toLowerCase());
+
+  // Best-effort human label: LiveATC renders a description near each feed in a
+  // <strong> before the listen link. If we can't find one, the id is shown.
+  return [...ids].map((id) => {
+    let label = null;
+    const near = html.toLowerCase().indexOf(id);
+    if (near > 0) {
+      const before = html.slice(Math.max(0, near - 800), near);
+      const labels = [...before.matchAll(/<strong>([^<]{3,80})<\/strong>/gi)];
+      if (labels.length) label = labels[labels.length - 1][1].replace(/\s+/g, ' ').trim();
+    }
+    return { id, label: label || id.toUpperCase() };
+  });
+}
+
+/**
+ * Extract stream URLs from a .pls playlist body. Pure function.
+ */
+function parsePls(body) {
+  const urls = [];
+  for (const m of String(body).matchAll(/^\s*File\d+\s*=\s*(\S+)\s*$/gim)) urls.push(m[1]);
+  return urls;
+}
+
+/**
  * Find the feeds LiveATC publishes for an airport.
  * Returns [{ id, label }] — empty array means "this airport has no feed",
  * which is a real and common answer, not an error to paper over.
@@ -44,25 +79,7 @@ async function discoverFeeds(icao) {
   if (hit && Date.now() - hit.at < FEED_TTL_MS) return hit.feeds;
 
   const res = await http(`${BASE}/search/?icao=${encodeURIComponent(key)}`);
-  const html = String(res.data);
-
-  // Feed IDs appear both as .pls links and as hlisten mount params.
-  const ids = new Set();
-  for (const m of html.matchAll(/\/play\/([a-z0-9_+-]+)\.pls/gi)) ids.add(m[1].toLowerCase());
-  for (const m of html.matchAll(/mount=([a-z0-9_+-]+)/gi)) ids.add(m[1].toLowerCase());
-
-  // Best-effort human label: LiveATC renders a description near each feed in a
-  // <strong>/<td> before the listen link. If we can't find one, the id is shown.
-  const feeds = [...ids].map((id) => {
-    let label = null;
-    const near = html.indexOf(id);
-    if (near > 0) {
-      const window = html.slice(Math.max(0, near - 800), near);
-      const labels = [...window.matchAll(/<strong>([^<]{3,80})<\/strong>/gi)];
-      if (labels.length) label = labels[labels.length - 1][1].replace(/\s+/g, ' ').trim();
-    }
-    return { id, label: label || id.toUpperCase() };
-  });
+  const feeds = parseFeedPage(res.data);
 
   feedCache.set(key, { at: Date.now(), feeds });
   return feeds;
@@ -82,10 +99,7 @@ async function resolveStreamUrls(feedId) {
     validateStatus: (s) => s < 500,
   });
 
-  const urls = [];
-  if (res.status === 200) {
-    for (const m of String(res.data).matchAll(/^\s*File\d+\s*=\s*(\S+)\s*$/gim)) urls.push(m[1]);
-  }
+  const urls = res.status === 200 ? parsePls(res.data) : [];
 
   urlCache.set(key, { at: Date.now(), urls });
   return urls;
@@ -112,4 +126,4 @@ async function openStream(feedId) {
   return null;
 }
 
-module.exports = { discoverFeeds, resolveStreamUrls, openStream };
+module.exports = { discoverFeeds, resolveStreamUrls, openStream, parseFeedPage, parsePls };

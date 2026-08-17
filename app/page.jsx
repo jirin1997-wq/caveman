@@ -5,6 +5,7 @@ import { useATCStore } from './store';
 import RadarMap from './components/RadarMap';
 import RadioPanel from './components/RadioPanel';
 import InfoPanel from './components/InfoPanel';
+import MovementBoard from './components/MovementBoard';
 
 const API = process.env.NEXT_PUBLIC_API || 'http://localhost:3001';
 
@@ -136,17 +137,23 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="flex-1 mx-auto max-w-[1600px] w-full p-4 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
+      <main className="flex-1 mx-auto max-w-[1700px] w-full p-4 grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0">
         <section className="lg:col-span-2 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden min-h-[420px]">
           <RadarMap />
         </section>
 
         <section className="flex flex-col gap-4 min-h-0">
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 flex-1 min-h-0 flex flex-col">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 flex-1 min-h-0 flex flex-col">
+            <MovementBoard />
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-4 min-h-0">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 flex-[3] min-h-0 flex flex-col">
             <RadioPanel api={API} onTransmit={transmit} />
           </div>
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 max-h-[38%] overflow-y-auto">
-            <InfoPanel />
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 flex-[4] min-h-0 overflow-y-auto">
+            <InfoPanel api={API} />
           </div>
         </section>
       </main>

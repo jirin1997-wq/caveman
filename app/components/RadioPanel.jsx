@@ -12,7 +12,7 @@ export default function RadioPanel({ api, onTransmit }) {
 
   const {
     airport,
-    feeds,
+    positions,
     feedsAvailable,
     feedsError,
     activeFeed,
@@ -20,6 +20,10 @@ export default function RadioPanel({ api, onTransmit }) {
     radioMessages,
     userCallsign,
   } = useATCStore();
+
+  const activePosition = positions.find((p) =>
+    p.feeds.some((f) => f.id === activeFeed?.id)
+  );
 
   // stop audio when the feed or airport changes
   useEffect(() => {
@@ -85,17 +89,53 @@ export default function RadioPanel({ api, onTransmit }) {
         </div>
 
         {feedsAvailable ? (
-          <select
-            value={activeFeed?.id || ''}
-            onChange={(e) => setActiveFeed(feeds.find((f) => f.id === e.target.value))}
-            className="w-full bg-gray-800 rounded px-2 py-1.5 text-xs"
-          >
-            {feeds.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
-          </select>
+          <>
+            {/* One button per ATC position that this airport actually has a
+                feed for. Positions with no feed are not shown at all. */}
+            <div className="flex flex-wrap gap-1 mb-2">
+              {positions.map((pos) => {
+                const active = activePosition?.key === pos.key;
+                return (
+                  <button
+                    key={pos.key}
+                    onClick={() => setActiveFeed(pos.feeds[0])}
+                    title={pos.hint}
+                    className={`px-2 py-1 rounded text-[11px] font-semibold transition ${
+                      active ? 'bg-blue-600' : 'bg-gray-800 hover:bg-gray-600'
+                    }`}
+                  >
+                    {pos.label}
+                    {pos.feeds.length > 1 && (
+                      <span className="opacity-60"> ×{pos.feeds.length}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activePosition?.hint && (
+              <p className="text-[10px] text-gray-400 mb-1.5">{activePosition.hint}</p>
+            )}
+
+            {/* If a position has several feeds (e.g. Tower North / South) */}
+            {activePosition && activePosition.feeds.length > 1 && (
+              <select
+                value={activeFeed?.id || ''}
+                onChange={(e) =>
+                  setActiveFeed(activePosition.feeds.find((f) => f.id === e.target.value))
+                }
+                className="w-full bg-gray-800 rounded px-2 py-1.5 text-xs mb-1"
+              >
+                {activePosition.feeds.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <p className="text-[10px] text-gray-500 font-mono">{activeFeed?.id}</p>
+          </>
         ) : (
           <p className="text-xs text-yellow-300">
             {feedsError

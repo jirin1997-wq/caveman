@@ -12,9 +12,24 @@ Aplikace je postavená na pravidle: **co není opravdové, netváří se jako op
 |---|---|---|
 | **ATC audio** | LiveATC.net | Opravdový zvuk z opravdové frekvence. Feed se hledá za běhu — nic není natvrdo v kódu. |
 | **Provoz na radaru** | adsb.lol → airplanes.live → OpenSky | Opravdová ADS-B data. Když žádný zdroj neodpoví, radar zůstane **prázdný** a napíše proč. |
+| **Typ letadla, imatrikulace, provozovatel** | databáze ADS-B sítě | Co transpondér nebo databáze nepošle, zůstane prázdné (pomlčka). Nikdy se nedoplňuje odhadem. |
+| **Fotky letadel** | Planespotters API | Hledá se podle hex kódu, který letadlo vysílá — takže je to **ten konkrétní trup nad tebou**, ne obecná fotka typu. S povinným uvedením autora. |
+| **Tabule příletů/odletů** | odvozeno z živých ADS-B | Kdo klesá k letišti, kdo stoupá pryč, kdo stojí na zemi. **Není to letový řád** — ten by chtěl placený zdroj, a ten si nevymýšlím. |
 | **Rádio mezi uživateli** | tenhle server | Opravdový chat mezi lidmi připojenými k téhle instanci. **Není to ATC** a je to tak i označené v UI. |
 
 Co v aplikaci **není**: žádný generátor „realistických" ATC hlášek, žádná náhodná letadla dosazená místo chybějících dat. Dřívější verze tohle měla a označovala to jako „LIVE" — bylo to smyšlené a je to pryč.
+
+---
+
+## Co v aplikaci uvidíš
+
+**Radar** — 2D scope kolem letiště, dosah 90 km. Klikni na letadlo (nebo na řádek v tabuli) a vpravo se otevře detail.
+
+**Detail letadla** — fotka konkrétního trupu, typ (`AIRBUS A-321neo · A21N`), imatrikulace, provozovatel, rok výroby, kategorie a třída turbulence, výška, rychlost, kurz, stoupání, squawk a vzdálenost od letiště. Nouzové squawky (7500 únos / 7600 ztráta spojení / 7700 nouze) se zvýrazní červeně.
+
+**Přepínače pozic** — Clearance · Ground · Tower · Approach · Departure · Radar/ACC · ATIS. Zobrazí se jen ty, pro které LiveATC u daného letiště opravdu feed má. Když má pozice víc feedů (např. Tower North/South), přibude druhý výběr.
+
+**Tabule provozu** — čtyři záložky: Přílety 🛬 / Odlety 🛫 / Na zemi 🅿 / Přelety ✈, s počtem u každé.
 
 ---
 
@@ -65,19 +80,43 @@ Přidání dalšího = jeden řádek v `server/airports.js` (ICAO + souřadnice)
 
 ---
 
+## Testy
+
+```bash
+npm test
+```
+
+35 testů, doběhnou za necelou vteřinu, **žádný nepotřebuje síť**. Testuje se to, kde bugy skutečně bývají — parsování cizích dat:
+
+- rozbor stránky LiveATC a `.pls` playlistu (včetně případu „letiště feed nemá")
+- zařazení feedů do pozic podle id i podle popisku
+- normalizace ADS-B payloadu — že se `alt_baro: "ground"` přeloží na 0 ft, že chybějící imatrikulace zůstane `null`, že letadlo bez pozice vypadne
+- dekódování nouzových squawků a kategorií
+- geometrie tabule: že brněnské letadlo nespadne do pražského „na zemi"
+- celá HTTP cesta proti podvržené síti, včetně toho, že **výpadek zdroje vrátí `live:false` s důvody, ne vymyšlený provoz**
+
+Poslední jmenovaný test je tam schválně — je to pojistka přesně proti té chybě, kterou dřívější verze téhle aplikace dělala.
+
+---
+
 ## Struktura
 
 ```
 server/
-  airports.js   letiště (ICAO + souřadnice, nic víc)
-  liveatc.js    hledání feedů + rozbalení .pls na adresu streamu
-  adsb.js       živý provoz, tři zdroje za sebou, poctivé selhání
-  radio.js      chat mezi uživateli (ne ATC)
-  index.js      REST + WebSocket + audio proxy
+  airports.js       letiště (ICAO + souřadnice, nic víc)
+  liveatc.js        hledání feedů + rozbalení .pls na adresu streamu
+  positions.js      zařazení feedů do pozic (Ground / Tower / Approach …)
+  adsb.js           živý provoz, tři zdroje za sebou, poctivé selhání
+  aircraft-meta.js  význam kategorií a squawků (ze specifikace ADS-B)
+  movements.js      tabule příletů/odletů odvozená z geometrie
+  photos.js         fotky přes Planespotters, podle hex kódu
+  radio.js          chat mezi uživateli (ne ATC)
+  index.js          REST + WebSocket + audio proxy
 app/
-  page.jsx      layout, výběr letiště, websocket
-  components/   RadarMap · RadioPanel · InfoPanel
-  store.js      zustand
+  page.jsx          layout, výběr letiště, websocket
+  components/       RadarMap · RadioPanel · MovementBoard · InfoPanel
+  store.js          zustand
+tests/              35 testů, offline
 ```
 
 ---

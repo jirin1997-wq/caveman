@@ -4,7 +4,10 @@ const { WebSocketServer } = require('ws');
 
 const { listAirports, getAirport, DEFAULT_ICAO } = require('./airports');
 const { discoverFeeds, openStream } = require('./liveatc');
+const { groupFeeds } = require('./positions');
 const { fetchTraffic } = require('./adsb');
+const { buildBoard } = require('./movements');
+const { photoForHex } = require('./photos');
 const RadioSystem = require('./radio');
 
 const app = express();
@@ -20,23 +23,30 @@ app.get('/api/airports', (_req, res) => res.json(listAirports()));
 
 app.get('/api/airport/:icao', (req, res) => {
   const airport = getAirport(req.params.icao);
-  if (!airport) return res.status(404).json({ error: 'unknown airport' });
+  if (!airport) return res.status(404).json({ error: 'neznámé letiště' });
   res.json(airport);
 });
 
-// Which LiveATC feeds exist for this airport, discovered live.
+// LiveATC feeds for this airport, discovered live and grouped into positions
+// (Clearance / Ground / Tower / Approach / Radar ...).
 app.get('/api/feeds/:icao', async (req, res) => {
   const airport = getAirport(req.params.icao);
-  if (!airport) return res.status(404).json({ error: 'unknown airport' });
+  if (!airport) return res.status(404).json({ error: 'neznámé letiště' });
   try {
     const feeds = await discoverFeeds(airport.icao);
-    res.json({ icao: airport.icao, feeds, available: feeds.length > 0 });
+    res.json({
+      icao: airport.icao,
+      feeds,
+      positions: groupFeeds(feeds),
+      available: feeds.length > 0,
+    });
   } catch (err) {
     res.status(502).json({
       icao: airport.icao,
       feeds: [],
+      positions: [],
       available: false,
-      error: `LiveATC unreachable: ${err.code || err.message}`,
+      error: `LiveATC nedostupné: ${err.code || err.message}`,
     });
   }
 });
@@ -48,24 +58,38 @@ app.get('/api/stream/:feedId', async (req, res) => {
   try {
     upstream = await openStream(req.params.feedId);
   } catch (err) {
-    return res.status(502).json({ error: `stream failed: ${err.code || err.message}` });
+    return res.status(502).json({ error: `stream selhal: ${err.code || err.message}` });
   }
-  if (!upstream) return res.status(404).json({ error: 'feed offline — no stream in playlist' });
+  if (!upstream) return res.status(404).json({ error: 'feed je offline — v playlistu není stream' });
 
   res.setHeader('Content-Type', upstream.contentType);
   res.setHeader('Cache-Control', 'no-store');
   upstream.stream.pipe(res);
 
-  const stop = () => upstream.stream.destroy();
-  req.on('close', stop);
+  req.on('close', () => upstream.stream.destroy());
   upstream.stream.on('error', () => res.destroy());
 });
 
 app.get('/api/traffic/:icao', async (req, res) => {
   const airport = getAirport(req.params.icao);
-  if (!airport) return res.status(404).json({ error: 'unknown airport' });
+  if (!airport) return res.status(404).json({ error: 'neznámé letiště' });
   const result = await fetchTraffic(airport.lat, airport.lon);
-  res.json({ icao: airport.icao, ...result });
+  res.json({ icao: airport.icao, ...result, board: buildBoard(result.aircraft, airport) });
+});
+
+// Photo of one specific airframe, by the hex its transponder broadcasts.
+app.get('/api/photo/:hex', async (req, res) => {
+  try {
+    const photo = await photoForHex(req.params.hex);
+    res.json({ hex: req.params.hex, photo, available: !!photo });
+  } catch (err) {
+    res.status(502).json({
+      hex: req.params.hex,
+      photo: null,
+      available: false,
+      error: `Planespotters nedostupné: ${err.code || err.message}`,
+    });
+  }
 });
 
 // --- WebSocket ----------------------------------------------------------
@@ -80,9 +104,9 @@ wss.on('connection', (ws) => {
       type: 'INIT',
       airports: listAirports(),
       airport: getAirport(DEFAULT_ICAO),
-      connected: wss.clients.size,
     })
   );
+  pushTraffic(ws, getAirport(DEFAULT_ICAO));
 
   ws.on('message', async (raw) => {
     let msg;
@@ -103,13 +127,15 @@ wss.on('connection', (ws) => {
 
     if (msg.type === 'RADIO_TRANSMIT') {
       if (!msg.text || !msg.callsign) return;
-      const out = radio.transmit({
-        callsign: msg.callsign,
-        role: msg.role,
-        channel: msg.channel,
-        text: msg.text,
+      broadcast({
+        type: 'RADIO_MESSAGE',
+        message: radio.transmit({
+          callsign: msg.callsign,
+          role: msg.role,
+          channel: msg.channel,
+          text: msg.text,
+        }),
       });
-      broadcast({ type: 'RADIO_MESSAGE', message: out });
       return;
     }
 
@@ -132,13 +158,21 @@ function broadcast(payload) {
   for (const client of wss.clients) if (client.readyState === 1) client.send(data);
 }
 
-async function pushTraffic(ws, airport) {
-  const result = await fetchTraffic(airport.lat, airport.lon);
-  if (ws.readyState !== 1) return;
-  ws.send(JSON.stringify({ type: 'TRAFFIC', icao: airport.icao, ...result }));
+function trafficPayload(icao, airport, result) {
+  return JSON.stringify({
+    type: 'TRAFFIC',
+    icao,
+    ...result,
+    board: buildBoard(result.aircraft, airport),
+  });
 }
 
-// Poll each airport that somebody is actually watching.
+async function pushTraffic(ws, airport) {
+  const result = await fetchTraffic(airport.lat, airport.lon);
+  if (ws.readyState === 1) ws.send(trafficPayload(airport.icao, airport, result));
+}
+
+// Poll only the airports somebody is actually watching.
 const POLL_MS = 8000;
 const poll = setInterval(async () => {
   const watched = new Set([...clients.values()].map((c) => c.icao));
@@ -146,12 +180,16 @@ const poll = setInterval(async () => {
     const airport = getAirport(icao);
     if (!airport) continue;
     const result = await fetchTraffic(airport.lat, airport.lon);
-    const payload = JSON.stringify({ type: 'TRAFFIC', icao, ...result });
+    const payload = trafficPayload(icao, airport, result);
     for (const [ws, state] of clients) {
       if (state.icao === icao && ws.readyState === 1) ws.send(payload);
     }
   }
 }, POLL_MS);
+
+// Don't let the poll timer alone hold the process open — without this the
+// server keeps an idle event loop alive forever and test runs never exit.
+poll.unref();
 
 process.on('SIGTERM', () => {
   clearInterval(poll);
@@ -159,9 +197,13 @@ process.on('SIGTERM', () => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`ATC Radio server on :${PORT}`);
-  console.log(`Default airport: ${DEFAULT_ICAO}`);
-  console.log('Live sources are contacted on demand — if your network blocks');
-  console.log('them, the UI will say so rather than invent traffic.');
-});
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`ATC Radio server na :${PORT}`);
+    console.log(`Výchozí letiště: ${DEFAULT_ICAO}`);
+    console.log('Živé zdroje se volají za běhu — když je síť blokuje,');
+    console.log('UI to napíše místo toho, aby si provoz vymyslelo.');
+  });
+}
+
+module.exports = { app, server };
