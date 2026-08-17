@@ -50,6 +50,18 @@ const STREETS = [
   'Korunní', 'Slezská', 'Sokolovská', 'Křižíkova', 'Veveří', 'Údolní', 'Cejl'
 ];
 
+// Demo obrázky bytů z Unsplash
+const PHOTO_URLS = [
+  'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=500',
+  'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=500',
+  'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=500',
+  'https://images.unsplash.com/photo-1536376072261-38c75010e6c9?w=500',
+  'https://images.unsplash.com/photo-1494145904049-0dca59b4bbad?w=500',
+  'https://images.unsplash.com/photo-1567521464027-f127ff144326?w=500',
+  'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=500',
+  'https://images.unsplash.com/photo-1493857671505-72967e2e2760?w=500'
+];
+
 /** Deterministický pseudonáhodný generátor — seed dá pokaždé stejná data. */
 function makeRandom(seed) {
   let state = seed;
@@ -128,7 +140,7 @@ function generateListings(city, districts, count, listingType) {
       is_discounted: discounted,
       original_price: discounted ? Math.round(price * between(1.05, 1.18)) : null,
       description: `${disp.code} o ploše ${size} m² v lokalitě ${neighborhood}, ${loc.district}.`,
-      photos: JSON.stringify([]),
+      photos: JSON.stringify(PHOTO_URLS.slice(Math.floor(rnd() * 3), Math.floor(rnd() * 3) + 3)),
       first_seen_at: firstSeen,
       created_at: firstSeen,
       updated_at: new Date(),
