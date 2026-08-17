@@ -35,16 +35,32 @@ Co v aplikaci **není**: žádný generátor „realistických" ATC hlášek, ž
 
 ## Spuštění
 
-### Možnost 1: Desktop appka (nejjednoduší)
+### Možnost 1: Stáhnout hotovou appku z GitHubu (bez terminálu)
+
+Nemusíš nic buildit — postaví to GitHub za tebe, na všechny tři systémy:
+
+1. na GitHubu jdi do záložky **Actions**
+2. vlevo vyber **Build desktop app**, vpravo klikni **Run workflow** (větev `claude/atc-radio-app-2xj5fz`)
+3. počkej ~10 minut, otevři doběhlý běh
+4. dole v sekci **Artifacts** stáhni podle svého systému:
+   - `atc-radio-windows` → `.exe` instalátor
+   - `atc-radio-macos` → `.dmg`
+   - `atc-radio-linux` → `.AppImage`
+
+Rozbalíš ZIP, spustíš — appka si sama nastartuje server i okno. Node ani terminál k tomu nepotřebuješ.
+
+> Appka není podepsaná certifikátem (ten stojí stovky dolarů ročně). Windows ukáže „SmartScreen: neznámý vydavatel" → **Více informací → Přesto spustit**. macOS → klikni pravým a **Otevřít**.
+
+### Možnost 2: Postavit appku u sebe
 
 ```bash
 npm install
 npm run build:electron
 ```
 
-Vytvoří soubor `dist/ATC-Radio-*.exe` (Windows), `.dmg` (Mac) nebo `.AppImage` (Linux). Stáhneš a spustíš — nic víc.
+Vytvoří `dist/ATC Radio-1.0.0.AppImage` (Linux), `.exe` (Windows) nebo `.dmg` (Mac) — vždy pro systém, na kterém to pouštíš. Křížem to nejde: Windows build z Linuxu potřebuje wine, macOS build jen macOS. Proto ta CI výše.
 
-### Možnost 2: Web dev (pro vývoj)
+### Možnost 3: Web dev (pro vývoj)
 
 ```bash
 npm install
@@ -56,7 +72,7 @@ npm run dev
 
 Otevři `localhost:3000`, nahoře vyber letiště, vpravo zapni `▶ poslouchat`.
 
-### Možnost 3: Electron dev (s hot reload)
+### Možnost 4: Electron dev (s hot reload)
 
 ```bash
 npm install
