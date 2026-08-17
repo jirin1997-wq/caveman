@@ -1,33 +1,48 @@
 import { create } from 'zustand';
 
-export const useATCStore = create((set, get) => ({
-  // Airport and aircraft data
+export const useATCStore = create((set) => ({
+  // airports
+  airports: [],
   airport: null,
+
+  // live traffic — `live` false means no source answered, NOT "nothing flying"
   aircraft: [],
+  trafficLive: false,
+  trafficSource: null,
+  trafficErrors: [],
   selectedAircraft: null,
 
-  // Radio system
-  activeFrequency: 118.1, // Tower frequency
-  frequencies: {},
+  // LiveATC feeds discovered for the current airport
+  feeds: [],
+  feedsAvailable: false,
+  feedsError: null,
+  activeFeed: null,
+
+  // user-to-user radio (not ATC)
   radioMessages: [],
-  channels: [],
-
-  // UI state
   userCallsign: '',
-  userRole: 'observer', // 'pilot', 'atc', 'observer'
-  mapZoom: 12,
+  userRole: 'pilot',
 
-  // Actions
-  setAirport: (airport) => set({ airport }),
-  setAircraft: (aircraft) => set({ aircraft }),
-  selectAircraft: (aircraft) => set({ selectedAircraft: aircraft }),
-  setActiveFrequency: (freq) => set({ activeFrequency: freq }),
-  setUserCallsign: (callsign) => set({ userCallsign: callsign }),
-  setUserRole: (role) => set({ userRole: role }),
-  addRadioMessage: (message) => set((state) => ({
-    radioMessages: [...state.radioMessages, message].slice(-50)
-  })),
-  setChannels: (channels) => set({ channels }),
-  setFrequencies: (frequencies) => set({ frequencies }),
-  clearRadioMessages: () => set({ radioMessages: [] }),
+  setAirports: (airports) => set({ airports }),
+  setAirport: (airport) => set({ airport, selectedAircraft: null }),
+  setTraffic: ({ aircraft, live, source, errors }) =>
+    set({
+      aircraft: aircraft || [],
+      trafficLive: !!live,
+      trafficSource: source || null,
+      trafficErrors: errors || [],
+    }),
+  selectAircraft: (a) => set({ selectedAircraft: a }),
+  setFeeds: ({ feeds, available, error }) =>
+    set({
+      feeds: feeds || [],
+      feedsAvailable: !!available,
+      feedsError: error || null,
+      activeFeed: (feeds && feeds[0]) || null,
+    }),
+  setActiveFeed: (feed) => set({ activeFeed: feed }),
+  addRadioMessage: (m) => set((s) => ({ radioMessages: [...s.radioMessages, m].slice(-80) })),
+  setRadioMessages: (radioMessages) => set({ radioMessages }),
+  setUserCallsign: (userCallsign) => set({ userCallsign }),
+  setUserRole: (userRole) => set({ userRole }),
 }));

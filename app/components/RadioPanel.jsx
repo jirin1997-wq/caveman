@@ -1,196 +1,159 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useATCStore } from '../store';
 
-export default function RadioPanel({ onTransmit }) {
-  const [message, setMessage] = useState('');
-  const [isTransmitting, setIsTransmitting] = useState(false);
-  const [audioStream, setAudioStream] = useState(null);
-  const [audioPlaying, setAudioPlaying] = useState(false);
+export default function RadioPanel({ api, onTransmit }) {
   const audioRef = useRef(null);
+  const logRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [audioError, setAudioError] = useState(null);
+  const [text, setText] = useState('');
 
-  const { activeFrequency, frequencies, radioMessages, setActiveFrequency, userCallsign, userRole } = useATCStore();
+  const {
+    airport,
+    feeds,
+    feedsAvailable,
+    feedsError,
+    activeFeed,
+    setActiveFeed,
+    radioMessages,
+    userCallsign,
+  } = useATCStore();
 
-  // LiveATC stream URLs for Prague (multiple sources for redundancy)
-  const liveATC = {
-    118.1: {
-      name: 'Tower',
-      streams: [
-        'https://prd-sto-liveatc.cdnstream1.com/lkpr_twr',
-        'https://fra-ah.stream.liveradio.cz:8000/lkpr_twr.mp3'
-      ]
-    },
-    121.85: {
-      name: 'Delivery',
-      streams: [
-        'https://prd-sto-liveatc.cdnstream1.com/lkpr_del'
-      ]
-    },
-    121.9: {
-      name: 'Ground',
-      streams: [
-        'https://prd-sto-liveatc.cdnstream1.com/lkpr_gnd'
-      ]
-    },
-    120.1: {
-      name: 'Approach',
-      streams: [
-        'https://prd-sto-liveatc.cdnstream1.com/lkpr_app'
-      ]
+  // stop audio when the feed or airport changes
+  useEffect(() => {
+    setPlaying(false);
+    setAudioError(null);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeAttribute('src');
+      audioRef.current.load();
     }
-  };
+  }, [activeFeed, airport]);
 
   useEffect(() => {
-    // Try to load LiveATC stream
-    if (liveATC[activeFrequency]) {
-      loadAudioStream(activeFrequency);
-    }
-  }, [activeFrequency]);
-
-  const loadAudioStream = (freq) => {
-    const stream = liveATC[freq];
-    if (!stream) return;
-
-    if (audioRef.current) {
-      // Try primary stream first
-      audioRef.current.src = stream.streams[0];
-
-      // Handle error by trying fallback streams
-      audioRef.current.onerror = () => {
-        console.log(`Primary stream failed for ${freq}, trying fallback...`);
-        if (stream.streams.length > 1) {
-          audioRef.current.src = stream.streams[1];
-        }
-      };
-    }
-
-    console.log(`Loaded stream for ${freq} MHz (${stream.name})`);
-  };
+    logRef.current?.scrollTo(0, logRef.current.scrollHeight);
+  }, [radioMessages]);
 
   const toggleAudio = async () => {
-    if (!audioRef.current) return;
+    const el = audioRef.current;
+    if (!el || !activeFeed) return;
 
-    if (audioPlaying) {
-      audioRef.current.pause();
-      setAudioPlaying(false);
-    } else {
-      try {
-        // Attempt to play - requires proper CORS setup
-        await audioRef.current.play();
-        setAudioPlaying(true);
-      } catch (error) {
-        console.error('Audio playback error:', error);
-      }
+    if (playing) {
+      el.pause();
+      el.removeAttribute('src');
+      el.load();
+      setPlaying(false);
+      return;
+    }
+
+    setAudioError(null);
+    // The server proxies LiveATC — the browser only ever talks to localhost.
+    el.src = `${api}/api/stream/${encodeURIComponent(activeFeed.id)}`;
+    try {
+      await el.play();
+      setPlaying(true);
+    } catch (err) {
+      setAudioError(err.message || 'přehrávání selhalo');
+      setPlaying(false);
     }
   };
 
-  const handleTransmit = (e) => {
+  const send = (e) => {
     e.preventDefault();
-    if (!message.trim() || !userCallsign) return;
-
-    setIsTransmitting(true);
-
-    // Simulate speech duration
-    const words = message.split(' ').length;
-    const duration = Math.max(2, Math.ceil(words / 2.5)) * 1000;
-
-    onTransmit(message);
-    setMessage('');
-
-    setTimeout(() => {
-      setIsTransmitting(false);
-    }, duration);
+    if (!text.trim() || !userCallsign) return;
+    onTransmit(text.trim(), activeFeed?.id || airport?.icao || 'general');
+    setText('');
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Frequency selector */}
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold mb-2 text-gray-300">Active Frequency</h3>
-        <select
-          value={activeFrequency}
-          onChange={(e) => setActiveFrequency(parseFloat(e.target.value))}
-          className="w-full px-3 py-2 bg-gray-700 rounded text-white font-mono"
-        >
-          {Object.entries(frequencies).map(([name, freq]) => (
-            <option key={freq} value={freq}>
-              {freq} MHz - {name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Audio player */}
-      <div className="mb-4 p-3 bg-gray-700 rounded">
+    <div className="flex flex-col h-full min-h-0 gap-3">
+      {/* --- live ATC audio --- */}
+      <div className="bg-gray-700/60 rounded p-3">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold">🎙️ Live ATC Audio</h4>
+          <h3 className="text-sm font-semibold">🎧 Živé ATC (LiveATC.net)</h3>
           <button
             onClick={toggleAudio}
-            className={`px-3 py-1 rounded text-sm font-bold ${
-              audioPlaying
-                ? 'bg-red-600 hover:bg-red-700 animate-pulse'
-                : 'bg-green-600 hover:bg-green-700'
+            disabled={!activeFeed}
+            className={`px-3 py-1 rounded text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed ${
+              playing ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
             }`}
           >
-            {audioPlaying ? '⏹ STOP' : '▶ LIVE'}
+            {playing ? '⏹ stop' : '▶ poslouchat'}
           </button>
         </div>
-        <audio
-          ref={audioRef}
-          crossOrigin="anonymous"
-          className="w-full text-xs"
-        />
-        <div className="text-xs mt-2 space-y-1">
-          <p className={`font-semibold ${audioPlaying ? 'text-red-300 animate-pulse' : 'text-green-300'}`}>
-            {audioPlaying ? '● LIVE - Recording ATC traffic' : '○ Ready to stream'}
+
+        {feedsAvailable ? (
+          <select
+            value={activeFeed?.id || ''}
+            onChange={(e) => setActiveFeed(feeds.find((f) => f.id === e.target.value))}
+            className="w-full bg-gray-800 rounded px-2 py-1.5 text-xs"
+          >
+            {feeds.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <p className="text-xs text-yellow-300">
+            {feedsError
+              ? `LiveATC nedostupné: ${feedsError}`
+              : `Pro ${airport?.icao || 'toto letiště'} LiveATC nenabízí žádný feed.`}
           </p>
-          <p className="text-gray-400">
-            {liveATC[activeFrequency]?.name || 'Unknown Frequency'}
-            {' - '}
-            {activeFrequency} MHz
-          </p>
-        </div>
+        )}
+
+        <audio ref={audioRef} onError={() => setAudioError('stream se nepodařilo otevřít')} />
+
+        <p className="text-xs mt-2 text-gray-300">
+          {playing ? '● vysílá se živý zvuk' : audioError ? `⚠ ${audioError}` : '○ zastaveno'}
+        </p>
       </div>
 
-      {/* Message input */}
-      <form onSubmit={handleTransmit} className="mb-4">
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          disabled={isTransmitting || !userCallsign}
-          placeholder={userCallsign ? 'Type your transmission...' : 'Enter callsign first'}
-          className="w-full px-3 py-2 bg-gray-700 rounded text-white text-sm resize-none placeholder-gray-500 disabled:opacity-50"
-          rows="3"
-        />
-        <button
-          type="submit"
-          disabled={isTransmitting || !userCallsign || !message.trim()}
-          className="w-full mt-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isTransmitting ? '📡 Transmitting...' : '📡 Transmit'}
-        </button>
-      </form>
+      {/* --- user-to-user radio --- */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        <h3 className="text-sm font-semibold mb-1">
+          💬 Rádio mezi uživateli
+          <span className="ml-2 text-[10px] font-normal text-gray-400 uppercase tracking-wide">
+            není ATC — píší sem lidé připojení k tomuhle serveru
+          </span>
+        </h3>
 
-      {/* Messages log */}
-      <div className="flex-1 overflow-y-auto bg-gray-700 rounded p-2">
-        <h4 className="text-sm font-semibold mb-2 sticky top-0 bg-gray-700">Radio Log</h4>
-        <div className="space-y-1">
+        <div ref={logRef} className="flex-1 min-h-0 overflow-y-auto bg-gray-700/40 rounded p-2 space-y-1">
           {radioMessages.length === 0 ? (
-            <p className="text-xs text-gray-400">Waiting for transmissions...</p>
+            <p className="text-xs text-gray-400">Zatím nikdo nic neposlal.</p>
           ) : (
-            radioMessages.map((msg) => (
+            radioMessages.map((m) => (
               <div
-                key={msg.id}
-                className={`text-xs p-1 rounded ${
-                  msg.role === 'atc' ? 'bg-blue-900 text-blue-200' : 'bg-green-900 text-green-200'
+                key={m.id}
+                className={`text-xs px-2 py-1 rounded ${
+                  m.role === 'atc' ? 'bg-blue-900/70 text-blue-100' : 'bg-green-900/70 text-green-100'
                 }`}
               >
-                <strong>{msg.callsign}:</strong> {msg.text}
+                <span className="font-bold font-mono">{m.callsign}</span>{' '}
+                <span className="opacity-60">[{m.role}]</span> {m.text}
               </div>
             ))
           )}
         </div>
+
+        <form onSubmit={send} className="mt-2 flex gap-2">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={!userCallsign}
+            placeholder={userCallsign ? 'zpráva…' : 'nejdřív zadej callsign'}
+            className="flex-1 bg-gray-700 rounded px-3 py-2 text-sm placeholder-gray-500 disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={!userCallsign || !text.trim()}
+            className="px-4 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold disabled:opacity-40"
+          >
+            📡
+          </button>
+        </form>
       </div>
     </div>
   );

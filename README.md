@@ -1,147 +1,97 @@
-# ✈️ ATC Radio - Prague Airport (LKPR)
+# ✈️ ATC Radio
 
-Live Air Traffic Control Radio Simulator for Prague Václava Havla Airport.
+Živý provoz a živé ATC audio pro Ruzyň a další letiště. Běží lokálně.
 
-## Features
+---
 
-- **Live Aircraft Tracking**: Real-time aircraft positions from OpenSky Network API
-- **Interactive Radar Map**: Canvas-based radar display with clickable aircraft
-- **Radio Communication**: Real-time ATC radio transmission system
-- **Live Audio Streaming**: Integration with LiveATC.net for live audio feeds
-- **Multiple Frequencies**: Support for Tower, Ground, Delivery, Approach, and Departure
-- **Aircraft Details**: Real-time altitude, speed, heading, and vertical rate data
+## Co je živé a co ne — čti první
 
-## Project Structure
+Aplikace je postavená na pravidle: **co není opravdové, netváří se jako opravdové.**
 
-```
-atc-radio-app/
-├── app/                      # Next.js frontend
-│   ├── components/          # React components
-│   ├── page.jsx            # Main page
-│   ├── store.js            # Zustand store
-│   └── globals.css         # Tailwind styles
-├── server/                  # Express backend
-│   ├── index.js           # Main server
-│   ├── simulator.js       # Aircraft simulator (OpenSky API)
-│   ├── radio.js           # Radio system
-│   └── config.js          # Airport configuration
-├── package.json
-└── README.md
-```
+| Část | Odkud | Poznámka |
+|---|---|---|
+| **ATC audio** | LiveATC.net | Opravdový zvuk z opravdové frekvence. Feed se hledá za běhu — nic není natvrdo v kódu. |
+| **Provoz na radaru** | adsb.lol → airplanes.live → OpenSky | Opravdová ADS-B data. Když žádný zdroj neodpoví, radar zůstane **prázdný** a napíše proč. |
+| **Rádio mezi uživateli** | tenhle server | Opravdový chat mezi lidmi připojenými k téhle instanci. **Není to ATC** a je to tak i označené v UI. |
 
-## Installation
+Co v aplikaci **není**: žádný generátor „realistických" ATC hlášek, žádná náhodná letadla dosazená místo chybějících dat. Dřívější verze tohle měla a označovala to jako „LIVE" — bylo to smyšlené a je to pryč.
+
+---
+
+## Spuštění
 
 ```bash
 npm install
-```
-
-## Development
-
-```bash
 npm run dev
 ```
 
-This starts:
-- **Frontend**: Next.js on `http://localhost:3000`
-- **Backend**: Express/WebSocket server on `ws://localhost:3001`
+- frontend → http://localhost:3000
+- backend → http://localhost:3001
 
-## API Integration
+Otevři `localhost:3000`, nahoře vyber letiště, vpravo zapni `▶ poslouchat`.
 
-### OpenSky Network
-- Free API for real-time ADS-B data
-- URL: `https://opensky-network.org/api/states/all`
-- Polls every 10 seconds for aircraft in Prague sector
+---
 
-### LiveATC.net
-- Live audio streaming from actual ATC frequencies
-- Streams embedded in radio panel
+## Proč to musí běžet lokálně
 
-## Airport Data
+Prohlížeč si audio z LiveATC nestáhne sám — brání tomu CORS a ochrana proti hotlinkování. Proto stream stahuje **Node backend** a posílá ho dál do tvého prohlížeče:
 
-**LKPR - Václava Havla Airport, Prague**
-- Elevation: 1,247 ft
-- Coordinates: 50.1008°N, 14.2600°E
-
-### Frequencies
-- **ATIS**: 118.7 MHz
-- **Delivery**: 121.85 MHz
-- **Ground**: 121.9 MHz
-- **Tower**: 118.1 MHz
-- **Approach**: 120.1 MHz
-- **Departure**: 120.5 MHz
-
-### Runways
-- **06L/24R**: 3,711 ft
-- **06R/24L**: 3,711 ft
-
-## Technology Stack
-
-- **Frontend**: Next.js, React, Zustand, Tailwind CSS
-- **Backend**: Express, WebSocket (ws)
-- **Real-time**: WebSocket for live aircraft & radio updates
-- **Visualization**: Canvas API for radar map
-
-## Features & Usage
-
-### 1. Radar Map
-- Shows real aircraft around Prague Airport
-- Click aircraft to view details
-- Color-coded by altitude (red=low, blue=high)
-- Real-time position updates
-
-### 2. Radio Communication
-- Select frequency to listen
-- Transmit messages to shared frequency
-- Live audio stream from actual ATC (when available)
-- Radio log with callsign and role indicators
-
-### 3. Aircraft Details
-- Altitude, heading, speed, vertical rate
-- Ground status
-- Origin information
-- Real-time position coordinates
-
-## WebSocket Messages
-
-### Client → Server
-
-```json
-{
-  "type": "RADIO_TRANSMIT",
-  "callsign": "CSA100:pilot",
-  "frequency": 118.1,
-  "text": "Prague Tower, CSA100 on approach"
-}
+```
+LiveATC.net ──▶ tvůj Node server ──▶ tvůj prohlížeč
+             (server-side fetch)   (jen localhost, žádné CORS)
 ```
 
-### Server → Client
+Stejný důvod platí pro ADS-B API. Cokoliv hostovaného v prohlížeči bez vlastního backendu (např. statická stránka) tohle udělat nemůže.
 
-```json
-{
-  "type": "UPDATE_AIRCRAFT",
-  "aircraft": [...],
-  "timestamp": 1234567890
-}
+---
+
+## Jak se hledají feedy
+
+Nic se nehádá. Postup za běhu:
+
+1. `GET liveatc.net/search/?icao=LKPR` → které feedy pro letiště existují
+2. `GET liveatc.net/play/<feed>.pls` → aktuální adresa streamu (CDN hostname se mění)
+3. server ji otevře a pipne do prohlížeče
+
+Když LiveATC pro dané letiště feed nemá, UI to napíše. To je legitimní odpověď — ne každé letiště je pokryté, a to včetně LKPR se může měnit.
+
+---
+
+## Letiště
+
+LKPR Praha/Ruzyně · LKTB Brno · LKMT Ostrava · EDDF Frankfurt · EHAM Amsterdam · EGLL Heathrow · LOWW Wien · KJFK New York
+
+Přidání dalšího = jeden řádek v `server/airports.js` (ICAO + souřadnice). Frekvence se nezadávají ručně — přebírají se z LiveATC, aby v aplikaci nemohla být špatná frekvence.
+
+---
+
+## Struktura
+
+```
+server/
+  airports.js   letiště (ICAO + souřadnice, nic víc)
+  liveatc.js    hledání feedů + rozbalení .pls na adresu streamu
+  adsb.js       živý provoz, tři zdroje za sebou, poctivé selhání
+  radio.js      chat mezi uživateli (ne ATC)
+  index.js      REST + WebSocket + audio proxy
+app/
+  page.jsx      layout, výběr letiště, websocket
+  components/   RadarMap · RadioPanel · InfoPanel
+  store.js      zustand
 ```
 
-## Notes
+---
 
-- **LiveATC Audio**: Requires proper CORS configuration (may need proxy)
-- **Real Data**: Uses free OpenSky Network API (rate limited)
-- **Simulation Fallback**: If API unavailable, uses simulated aircraft
-- **Browser Compatible**: Tested on Chrome, Firefox, Safari
+## Podmínky použití
 
-## Future Enhancements
+LiveATC ve svých podmínkách **zakazuje přeposílání a redistribuci** svého zvuku. Proxy na vlastním počítači pro vlastní poslech je osobní použití. **Nenasazuj tohle na veřejnou URL** — tím by ses dostal do redistribuce. To je zároveň důvod, proč to není nikde nasazené jako veřejný odkaz.
 
-- [ ] Audio streaming with proper CORS proxy
-- [ ] Departure/arrival board
-- [ ] Weather integration (METAR/TAF)
-- [ ] Flight plan management
-- [ ] Voice communication (WebRTC)
-- [ ] More detailed aircraft models
-- [ ] Historical flight data
-- [ ] User authentication
+ADS-B zdroje (adsb.lol, airplanes.live, OpenSky) jsou komunitní a bez klíče mají rate limity. Dotazuje se jednou za 8 sekund a jen na letiště, které někdo skutečně sleduje.
 
-## License
+---
 
-MIT
+## Známá omezení
+
+- Chat je in-memory — restart serveru historii smaže.
+- Radar je 2D scope kolem letiště v dosahu 90 km, ne mapa s terénem.
+- Feedy někdy vypadnou i když existují (dobrovolníci vypnou přijímač). UI ukáže `stream se nepodařilo otevřít`.

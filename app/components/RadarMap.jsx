@@ -3,170 +3,159 @@
 import { useEffect, useRef } from 'react';
 import { useATCStore } from '../store';
 
+const RANGE_KM = 90; // radius drawn from the airport to the edge of the scope
+
 export default function RadarMap() {
   const canvasRef = useRef(null);
-  const { aircraft, airport, selectedAircraft, selectAircraft } = useATCStore();
+  const { aircraft, airport, trafficLive, trafficErrors, selectedAircraft, selectAircraft } =
+    useATCStore();
+
+  // Convert lat/lon to canvas pixels. Longitude degrees shrink with latitude.
+  const project = (ac, airportRef, w, h) => {
+    const kmPerDegLat = 111.32;
+    const kmPerDegLon = 111.32 * Math.cos((airportRef.lat * Math.PI) / 180);
+    const dx = (ac.position.lng - airportRef.lon) * kmPerDegLon;
+    const dy = (airportRef.lat - ac.position.lat) * kmPerDegLat;
+    const pxPerKm = (Math.min(w, h) * 0.46) / RANGE_KM;
+    return { x: w / 2 + dx * pxPerKm, y: h / 2 + dy * pxPerKm };
+  };
 
   useEffect(() => {
-    if (!canvasRef.current || !airport) return;
-
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    if (!canvas || !airport) return;
+
     const rect = canvas.getBoundingClientRect();
-    const pixelRatio = window.devicePixelRatio || 1;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    canvas.width = rect.width * pixelRatio;
-    canvas.height = rect.height * pixelRatio;
-    ctx.scale(pixelRatio, pixelRatio);
+    const w = rect.width;
+    const h = rect.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const maxR = Math.min(w, h) * 0.46;
 
-    const width = rect.width;
-    const height = rect.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
+    ctx.fillStyle = '#080c08';
+    ctx.fillRect(0, 0, w, h);
 
-    // Clear canvas
-    ctx.fillStyle = '#0f0f0f';
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw radar circles
-    ctx.strokeStyle = '#2d5016';
-    ctx.lineWidth = 1;
-    for (let r = 10; r <= 100; r += 20) {
-      const radius = (r / 100) * Math.min(width, height) * 0.4;
+    // range rings every 30 km
+    ctx.strokeStyle = '#1e3a1e';
+    ctx.fillStyle = '#2f5d2f';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    for (let km = 30; km <= RANGE_KM; km += 30) {
+      const r = (km / RANGE_KM) * maxR;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.fillText(`${km}km`, cx, cy - r + 11);
     }
 
-    // Draw cardinal directions
-    ctx.fillStyle = '#4d7f2d';
-    ctx.font = 'bold 12px monospace';
-    ctx.textAlign = 'center';
+    // cardinals
+    ctx.fillStyle = '#3f7f3f';
+    ctx.font = 'bold 11px monospace';
     ctx.textBaseline = 'middle';
-
-    const directions = [
-      { text: 'N', angle: 0 },
-      { text: 'E', angle: Math.PI / 2 },
-      { text: 'S', angle: Math.PI },
-      { text: 'W', angle: (3 * Math.PI) / 2 },
-    ];
-
-    directions.forEach(({ text, angle }) => {
-      const x = centerX + Math.sin(angle) * 110;
-      const y = centerY - Math.cos(angle) * 110;
-      ctx.fillText(text, x, y);
+    [['N', 0], ['E', 90], ['S', 180], ['W', 270]].forEach(([label, deg]) => {
+      const rad = (deg * Math.PI) / 180;
+      ctx.fillText(label, cx + Math.sin(rad) * (maxR + 12), cy - Math.cos(rad) * (maxR + 12));
     });
 
-    // Draw airport
+    // airport
     ctx.fillStyle = '#ff9900';
     ctx.beginPath();
-    ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#ffccaa';
     ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(airport.code, centerX + 10, centerY - 5);
+    ctx.fillText(airport.icao, cx + 8, cy - 6);
 
-    // Draw aircraft
-    const scale = (Math.min(width, height) * 0.4) / 100; // Scale degrees to pixels
-
+    // traffic
     aircraft.forEach((ac) => {
-      const dx = (ac.position.lng - airport.coordinates.lng) * scale * 111; // longitude to km
-      const dy = (airport.coordinates.lat - ac.position.lat) * scale * 111; // latitude to km
+      const { x, y } = project(ac, airport, w, h);
+      if (x < -20 || x > w + 20 || y < -20 || y > h + 20) return;
 
-      const x = centerX + dx;
-      const y = centerY + dy;
+      const selected = selectedAircraft?.id === ac.id;
 
-      // Skip if out of bounds
-      if (x < 0 || x > width || y < 0 || y > height) return;
-
-      // Draw aircraft
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate((ac.heading * Math.PI) / 180);
-
-      const isSelected = selectedAircraft?.id === ac.id;
-
-      // Aircraft symbol
       ctx.fillStyle = ac.color || '#4d96ff';
       ctx.beginPath();
-      ctx.moveTo(0, -6);
-      ctx.lineTo(-3, 6);
+      ctx.moveTo(0, -7);
+      ctx.lineTo(-4, 6);
       ctx.lineTo(0, 3);
-      ctx.lineTo(3, 6);
+      ctx.lineTo(4, 6);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
 
-      if (isSelected) {
+      if (selected) {
         ctx.strokeStyle = '#ffff00';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(0, 0, 10, 0, Math.PI * 2);
+        ctx.arc(x, y, 12, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      ctx.restore();
-
-      // Callsign label
-      ctx.fillStyle = isSelected ? '#ffff00' : '#cccccc';
-      ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(ac.callsign, x, y + 15);
-
-      // Altitude label
-      ctx.fillStyle = '#999999';
+      ctx.fillStyle = selected ? '#ffff00' : '#d8d8d8';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText(ac.callsign, x, y + 18);
+      ctx.fillStyle = '#8a8a8a';
       ctx.font = '9px monospace';
-      ctx.fillText(`${(ac.altitude / 1000).toFixed(1)}k`, x, y + 25);
+      ctx.fillText(`${Math.round(ac.altitude / 100)} · ${Math.round(ac.velocity)}kt`, x, y + 28);
     });
-
-    // Draw center crosshair
-    ctx.strokeStyle = '#2d5016';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(centerX - 10, centerY);
-    ctx.lineTo(centerX + 10, centerY);
-    ctx.moveTo(centerX, centerY - 10);
-    ctx.lineTo(centerX, centerY + 10);
-    ctx.stroke();
   }, [aircraft, airport, selectedAircraft]);
 
-  const handleCanvasClick = (e) => {
-    if (!canvasRef.current || !airport) return;
+  const onClick = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !airport) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    // Find clicked aircraft
-    for (const ac of aircraft) {
-      const dx = (ac.position.lng - airport.coordinates.lng) * 111;
-      const dy = (airport.coordinates.lat - ac.position.lat) * 111;
-
-      const scale = (Math.min(rect.width, rect.height) * 0.4) / 100;
-      const screenX = rect.width / 2 + dx * scale;
-      const screenY = rect.height / 2 + dy * scale;
-
-      const distance = Math.sqrt((x - screenX) ** 2 + (y - screenY) ** 2);
-      if (distance < 15) {
-        selectAircraft(ac);
-        return;
+    let best = null;
+    let bestDist = 18;
+    aircraft.forEach((ac) => {
+      const { x, y } = project(ac, airport, rect.width, rect.height);
+      const d = Math.hypot(mx - x, my - y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = ac;
       }
-    }
-
-    selectAircraft(null);
+    });
+    selectAircraft(best);
   };
 
   return (
-    <div className="w-full h-full flex flex-col">
-      <div className="flex-1 bg-black rounded cursor-crosshair">
-        <canvas
-          ref={canvasRef}
-          onClick={handleCanvasClick}
-          className="w-full h-full"
-        />
-      </div>
-      <div className="p-2 text-xs text-gray-400 border-t border-gray-700">
-        {aircraft.length} aircraft in range | Click to select | N=Up, S=Down
+    <div className="w-full h-full flex flex-col relative">
+      <canvas ref={canvasRef} onClick={onClick} className="flex-1 w-full cursor-crosshair" />
+
+      {!trafficLive && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="bg-black/80 border border-yellow-700 rounded-lg px-5 py-4 max-w-md text-center">
+            <p className="text-yellow-300 font-bold mb-1">Žádná živá data o provozu</p>
+            <p className="text-xs text-gray-300 mb-2">
+              Nezobrazuju vymyšlená letadla — prázdný radar je pravdivější.
+            </p>
+            {trafficErrors?.length > 0 && (
+              <ul className="text-[10px] text-gray-500 font-mono text-left">
+                {trafficErrors.map((e) => (
+                  <li key={e}>· {e}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="px-3 py-1.5 text-xs text-gray-400 border-t border-gray-700 flex justify-between">
+        <span>
+          {aircraft.length} letadel · dosah {RANGE_KM} km
+        </span>
+        <span>štítek: FL · rychlost</span>
       </div>
     </div>
   );

@@ -1,77 +1,36 @@
-class RadioSystem {
-  constructor(frequencies) {
-    this.frequencies = frequencies;
-    this.channels = new Map();
-    this.callsigns = new Set();
+// Text radio between the humans currently connected to this server.
+//
+// This is genuinely live — it is real people typing to each other — but it is
+// NOT air traffic control. Nothing here is generated; if nobody types, it stays
+// empty, and that empty state is the honest one.
 
-    // Initialize channels for each frequency
-    Object.entries(frequencies).forEach(([name, freq]) => {
-      this.channels.set(freq, {
-        name,
-        frequency: freq,
-        messages: [],
-        activeCallsigns: new Set()
-      });
-    });
+class RadioSystem {
+  constructor(maxPerChannel = 100) {
+    this.channels = new Map(); // channel key -> messages[]
+    this.maxPerChannel = maxPerChannel;
   }
 
-  transmit(callsign, frequency, text) {
-    const channel = this.channels.get(frequency);
-    if (!channel) return null;
-
-    // Parse message (callsign might include role like "pilot" or "atc")
-    const [actualCallsign, role = 'pilot'] = callsign.split(':');
-
-    const message = {
-      id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      callsign: actualCallsign,
-      role, // 'pilot' or 'atc'
-      frequency,
-      text,
+  transmit({ callsign, role, channel, text }) {
+    const msg = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      callsign: String(callsign || 'UNKNOWN').slice(0, 16),
+      role: role === 'atc' ? 'atc' : 'pilot',
+      channel: String(channel),
+      text: String(text).slice(0, 500),
       timestamp: Date.now(),
-      duration: this.estimateSpeechDuration(text)
+      kind: 'user', // never 'atc-live' — this server does not receive ATC text
     };
 
-    channel.messages.push(message);
-    channel.activeCallsigns.add(actualCallsign);
+    const list = this.channels.get(msg.channel) || [];
+    list.push(msg);
+    if (list.length > this.maxPerChannel) list.shift();
+    this.channels.set(msg.channel, list);
 
-    // Keep last 50 messages per frequency
-    if (channel.messages.length > 50) {
-      channel.messages.shift();
-    }
-
-    return message;
+    return msg;
   }
 
-  getChannelMessages(frequency, limit = 20) {
-    const channel = this.channels.get(frequency);
-    if (!channel) return [];
-
-    return channel.messages.slice(-limit);
-  }
-
-  getAllChannels() {
-    return Array.from(this.channels.values()).map(ch => ({
-      name: ch.name,
-      frequency: ch.frequency,
-      messageCount: ch.messages.length,
-      activeCallsigns: Array.from(ch.activeCallsigns),
-      recentMessages: ch.messages.slice(-5)
-    }));
-  }
-
-  estimateSpeechDuration(text) {
-    // Rough estimate: ~150 words per minute = 2.5 words per second
-    const words = text.split(' ').length;
-    return Math.max(2, Math.ceil(words / 2.5)); // min 2 seconds
-  }
-
-  registerCallsign(callsign) {
-    this.callsigns.add(callsign);
-  }
-
-  getActiveCallsigns() {
-    return Array.from(this.callsigns);
+  history(channel, limit = 30) {
+    return (this.channels.get(String(channel)) || []).slice(-limit);
   }
 }
 

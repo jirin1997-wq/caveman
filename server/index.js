@@ -1,186 +1,167 @@
+const http = require('http');
 const express = require('express');
 const { WebSocketServer } = require('ws');
-const http = require('http');
-const { AIRPORT_CONFIG, SIMULATION_CONFIG } = require('./config');
-const AircraftSimulator = require('./simulator');
+
+const { listAirports, getAirport, DEFAULT_ICAO } = require('./airports');
+const { discoverFeeds, openStream } = require('./liveatc');
+const { fetchTraffic } = require('./adsb');
 const RadioSystem = require('./radio');
-const ATCFeed = require('./atc-feed');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+const radio = new RadioSystem();
 
-// Aircraft simulator
-const simulator = new AircraftSimulator(AIRPORT_CONFIG, SIMULATION_CONFIG);
-
-// Radio system
-const radio = new RadioSystem(AIRPORT_CONFIG.frequencies);
-
-// Live ATC feed
-const atcFeed = new ATCFeed();
-
-// Middleware
 app.use(express.json());
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  next();
+
+// --- REST ---------------------------------------------------------------
+
+app.get('/api/airports', (_req, res) => res.json(listAirports()));
+
+app.get('/api/airport/:icao', (req, res) => {
+  const airport = getAirport(req.params.icao);
+  if (!airport) return res.status(404).json({ error: 'unknown airport' });
+  res.json(airport);
 });
 
-// REST API endpoints
-app.get('/api/airport', (req, res) => {
-  res.json(AIRPORT_CONFIG);
-});
-
-app.get('/api/aircraft', (req, res) => {
-  res.json(simulator.getAircraft());
-});
-
-app.get('/api/frequencies', (req, res) => {
-  res.json(AIRPORT_CONFIG.frequencies);
-});
-
-app.get('/api/radio-status', (req, res) => {
-  res.json({
-    status: 'live',
-    aircraft: simulator.getAircraft().length,
-    messages: radio.getChannelMessages(AIRPORT_CONFIG.frequencies.Tower, 5),
-    timestamp: Date.now()
-  });
-});
-
-app.get('/api/atc-stream/:frequency', (req, res) => {
-  const frequency = parseFloat(req.params.frequency);
-  const atcMessages = atcFeed.getMessagesByFrequency(frequency, 20);
-  const radioMessages = radio.getChannelMessages(frequency, 20);
-
-  // Merge both feeds
-  const allMessages = [...atcMessages, ...radioMessages]
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 20);
-
-  res.json({
-    frequency,
-    frequencyName: Object.keys(AIRPORT_CONFIG.frequencies).find(
-      k => AIRPORT_CONFIG.frequencies[k] === frequency
-    ),
-    messages: allMessages,
-    isLive: true,
-    source: 'Live ATC + Radio',
-    timestamp: Date.now()
-  });
-});
-
-app.get('/api/atc-log', (req, res) => {
-  res.json({
-    messages: atcFeed.getMessages(50),
-    isLive: true,
-    timestamp: Date.now()
-  });
-});
-
-// WebSocket connection handling
-wss.on('connection', (ws) => {
-  console.log('Client connected');
-
-  // Send initial state
-  ws.send(JSON.stringify({
-    type: 'INIT',
-    airport: AIRPORT_CONFIG,
-    aircraft: simulator.getAircraft()
-  }));
-
-  ws.on('message', (data) => {
-    try {
-      const message = JSON.parse(data);
-      handleClientMessage(ws, message);
-    } catch (e) {
-      console.error('Invalid message:', e);
-    }
-  });
-
-  ws.on('close', () => {
-    console.log('Client disconnected');
-  });
-});
-
-// Broadcast aircraft updates to all connected clients
-const updateInterval = setInterval(() => {
-  simulator.updateAircraft();
-  const aircraft = simulator.getAircraft();
-
-  const message = JSON.stringify({
-    type: 'UPDATE_AIRCRAFT',
-    aircraft,
-    timestamp: Date.now()
-  });
-
-  wss.clients.forEach((client) => {
-    if (client.readyState === 1) { // OPEN
-      client.send(message);
-    }
-  });
-}, SIMULATION_CONFIG.updateInterval);
-
-function handleClientMessage(ws, message) {
-  switch (message.type) {
-    case 'RADIO_TRANSMIT':
-      // Register callsign and transmit
-      radio.registerCallsign(message.callsign);
-      const radioMsg = radio.transmit(message.callsign, message.frequency, message.text);
-
-      // Broadcast to all clients
-      wss.clients.forEach((client) => {
-        if (client.readyState === 1) {
-          client.send(JSON.stringify({
-            type: 'RADIO_MESSAGE',
-            message: radioMsg,
-            frequency: message.frequency
-          }));
-        }
-      });
-      break;
-
-    case 'GET_FREQUENCY':
-      // Get messages for specific frequency
-      const messages = radio.getChannelMessages(message.frequency);
-      ws.send(JSON.stringify({
-        type: 'FREQUENCY_MESSAGES',
-        frequency: message.frequency,
-        messages
-      }));
-      break;
-
-    case 'GET_CHANNELS':
-      // Get all channels info
-      const channels = radio.getAllChannels();
-      ws.send(JSON.stringify({
-        type: 'CHANNELS_INFO',
-        channels
-      }));
-      break;
-
-    case 'REQUEST_FLIGHT':
-      // Create new simulated flight
-      const flight = simulator.createAircraft(message.callsign, message.type);
-      ws.send(JSON.stringify({
-        type: 'FLIGHT_CREATED',
-        flight
-      }));
-      break;
+// Which LiveATC feeds exist for this airport, discovered live.
+app.get('/api/feeds/:icao', async (req, res) => {
+  const airport = getAirport(req.params.icao);
+  if (!airport) return res.status(404).json({ error: 'unknown airport' });
+  try {
+    const feeds = await discoverFeeds(airport.icao);
+    res.json({ icao: airport.icao, feeds, available: feeds.length > 0 });
+  } catch (err) {
+    res.status(502).json({
+      icao: airport.icao,
+      feeds: [],
+      available: false,
+      error: `LiveATC unreachable: ${err.code || err.message}`,
+    });
   }
+});
+
+// Audio proxy: the browser cannot fetch LiveATC directly (CORS + hotlink
+// checks), so the server fetches and pipes it through. Personal listening only.
+app.get('/api/stream/:feedId', async (req, res) => {
+  let upstream;
+  try {
+    upstream = await openStream(req.params.feedId);
+  } catch (err) {
+    return res.status(502).json({ error: `stream failed: ${err.code || err.message}` });
+  }
+  if (!upstream) return res.status(404).json({ error: 'feed offline — no stream in playlist' });
+
+  res.setHeader('Content-Type', upstream.contentType);
+  res.setHeader('Cache-Control', 'no-store');
+  upstream.stream.pipe(res);
+
+  const stop = () => upstream.stream.destroy();
+  req.on('close', stop);
+  upstream.stream.on('error', () => res.destroy());
+});
+
+app.get('/api/traffic/:icao', async (req, res) => {
+  const airport = getAirport(req.params.icao);
+  if (!airport) return res.status(404).json({ error: 'unknown airport' });
+  const result = await fetchTraffic(airport.lat, airport.lon);
+  res.json({ icao: airport.icao, ...result });
+});
+
+// --- WebSocket ----------------------------------------------------------
+
+const clients = new Map(); // ws -> { icao }
+
+wss.on('connection', (ws) => {
+  clients.set(ws, { icao: DEFAULT_ICAO });
+
+  ws.send(
+    JSON.stringify({
+      type: 'INIT',
+      airports: listAirports(),
+      airport: getAirport(DEFAULT_ICAO),
+      connected: wss.clients.size,
+    })
+  );
+
+  ws.on('message', async (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    if (msg.type === 'SET_AIRPORT') {
+      const airport = getAirport(msg.icao);
+      if (!airport) return;
+      clients.set(ws, { icao: airport.icao });
+      ws.send(JSON.stringify({ type: 'AIRPORT_CHANGED', airport }));
+      pushTraffic(ws, airport);
+      return;
+    }
+
+    if (msg.type === 'RADIO_TRANSMIT') {
+      if (!msg.text || !msg.callsign) return;
+      const out = radio.transmit({
+        callsign: msg.callsign,
+        role: msg.role,
+        channel: msg.channel,
+        text: msg.text,
+      });
+      broadcast({ type: 'RADIO_MESSAGE', message: out });
+      return;
+    }
+
+    if (msg.type === 'RADIO_HISTORY') {
+      ws.send(
+        JSON.stringify({
+          type: 'RADIO_HISTORY',
+          channel: msg.channel,
+          messages: radio.history(msg.channel),
+        })
+      );
+    }
+  });
+
+  ws.on('close', () => clients.delete(ws));
+});
+
+function broadcast(payload) {
+  const data = JSON.stringify(payload);
+  for (const client of wss.clients) if (client.readyState === 1) client.send(data);
 }
 
-// Graceful shutdown
+async function pushTraffic(ws, airport) {
+  const result = await fetchTraffic(airport.lat, airport.lon);
+  if (ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'TRAFFIC', icao: airport.icao, ...result }));
+}
+
+// Poll each airport that somebody is actually watching.
+const POLL_MS = 8000;
+const poll = setInterval(async () => {
+  const watched = new Set([...clients.values()].map((c) => c.icao));
+  for (const icao of watched) {
+    const airport = getAirport(icao);
+    if (!airport) continue;
+    const result = await fetchTraffic(airport.lat, airport.lon);
+    const payload = JSON.stringify({ type: 'TRAFFIC', icao, ...result });
+    for (const [ws, state] of clients) {
+      if (state.icao === icao && ws.readyState === 1) ws.send(payload);
+    }
+  }
+}, POLL_MS);
+
 process.on('SIGTERM', () => {
-  clearInterval(updateInterval);
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
+  clearInterval(poll);
+  server.close(() => process.exit(0));
 });
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`ATC Server running on port ${PORT}`);
-  console.log(`Airport: ${AIRPORT_CONFIG.name} (${AIRPORT_CONFIG.code})`);
+  console.log(`ATC Radio server on :${PORT}`);
+  console.log(`Default airport: ${DEFAULT_ICAO}`);
+  console.log('Live sources are contacted on demand — if your network blocks');
+  console.log('them, the UI will say so rather than invent traffic.');
 });

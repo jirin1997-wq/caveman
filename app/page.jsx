@@ -1,136 +1,155 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useATCStore } from './store';
 import RadarMap from './components/RadarMap';
 import RadioPanel from './components/RadioPanel';
 import InfoPanel from './components/InfoPanel';
 
+const API = process.env.NEXT_PUBLIC_API || 'http://localhost:3001';
+
 export default function Home() {
-  const [ws, setWs] = useState(null);
+  const wsRef = useRef(null);
   const [connected, setConnected] = useState(false);
-  const { setAircraft, setAirport, setFrequencies, addRadioMessage, userCallsign, setUserCallsign, setUserRole } = useATCStore();
 
+  const {
+    airports,
+    airport,
+    trafficLive,
+    trafficSource,
+    setAirports,
+    setAirport,
+    setTraffic,
+    setFeeds,
+    addRadioMessage,
+    userCallsign,
+    setUserCallsign,
+    userRole,
+    setUserRole,
+  } = useATCStore();
+
+  // --- websocket ---
   useEffect(() => {
-    // Connect to WebSocket server
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.hostname}:3001`;
+    const url = API.replace(/^http/, 'ws');
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
 
-    try {
-      const websocket = new WebSocket(wsUrl);
+    ws.onopen = () => setConnected(true);
+    ws.onclose = () => setConnected(false);
+    ws.onerror = () => setConnected(false);
+    ws.onmessage = (ev) => {
+      const data = JSON.parse(ev.data);
+      if (data.type === 'INIT') {
+        setAirports(data.airports);
+        setAirport(data.airport);
+      } else if (data.type === 'AIRPORT_CHANGED') {
+        setAirport(data.airport);
+      } else if (data.type === 'TRAFFIC') {
+        setTraffic(data);
+      } else if (data.type === 'RADIO_MESSAGE') {
+        addRadioMessage(data.message);
+      }
+    };
 
-      websocket.onopen = () => {
-        console.log('Connected to ATC server');
-        setConnected(true);
-      };
+    return () => ws.close();
+  }, [setAirports, setAirport, setTraffic, addRadioMessage]);
 
-      websocket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        handleServerMessage(data);
-      };
+  // --- discover LiveATC feeds whenever the airport changes ---
+  useEffect(() => {
+    if (!airport) return;
+    let cancelled = false;
+    setFeeds({ feeds: [], available: false, error: null });
 
-      websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setConnected(false);
-      };
+    fetch(`${API}/api/feeds/${airport.icao}`)
+      .then((r) => r.json())
+      .then((d) => !cancelled && setFeeds(d))
+      .catch((e) => !cancelled && setFeeds({ feeds: [], available: false, error: String(e) }));
 
-      websocket.onclose = () => {
-        console.log('Disconnected from server');
-        setConnected(false);
-      };
+    return () => {
+      cancelled = true;
+    };
+  }, [airport, setFeeds]);
 
-      setWs(websocket);
-
-      return () => {
-        websocket.close();
-      };
-    } catch (error) {
-      console.error('Failed to connect:', error);
-    }
+  const changeAirport = useCallback((icao) => {
+    wsRef.current?.send(JSON.stringify({ type: 'SET_AIRPORT', icao }));
   }, []);
 
-  const handleServerMessage = (data) => {
-    switch (data.type) {
-      case 'INIT':
-        setAirport(data.airport);
-        setFrequencies(data.airport.frequencies);
-        setAircraft(data.aircraft);
-        break;
-
-      case 'UPDATE_AIRCRAFT':
-        setAircraft(data.aircraft);
-        break;
-
-      case 'RADIO_MESSAGE':
-        addRadioMessage(data.message);
-        break;
-
-      case 'CHANNELS_INFO':
-        // Handle channels update
-        break;
-    }
-  };
-
-  const handleRadioTransmit = (text) => {
-    if (!ws || !connected) return;
-
-    const activeFrequency = useATCStore.getState().activeFrequency;
-    const callsign = userCallsign || 'UNKNOWN';
-
-    ws.send(JSON.stringify({
-      type: 'RADIO_TRANSMIT',
-      callsign: `${callsign}:${useATCStore.getState().userRole}`,
-      frequency: activeFrequency,
-      text
-    }));
-  };
+  const transmit = useCallback(
+    (text, channel) => {
+      wsRef.current?.send(
+        JSON.stringify({
+          type: 'RADIO_TRANSMIT',
+          callsign: userCallsign,
+          role: userRole,
+          channel,
+          text,
+        })
+      );
+    },
+    [userCallsign, userRole]
+  );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold">🛩️ ATC Radio - LKPR (Prague)</h1>
-          <div className="flex gap-4 items-center">
-            <div className={`px-3 py-1 rounded ${connected ? 'bg-green-500' : 'bg-red-500'}`}>
-              {connected ? '● Live' : '● Offline'}
-            </div>
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
+        <div className="mx-auto max-w-[1600px] flex flex-wrap gap-3 items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold">🛩️ ATC Radio</h1>
+            <select
+              value={airport?.icao || ''}
+              onChange={(e) => changeAirport(e.target.value)}
+              className="bg-gray-700 rounded px-3 py-1.5 text-sm"
+            >
+              {airports.map((a) => (
+                <option key={a.icao} value={a.icao}>
+                  {a.icao} — {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm">
+            <span className={`px-2 py-1 rounded ${connected ? 'bg-green-700' : 'bg-red-700'}`}>
+              {connected ? 'server ●' : 'server ○'}
+            </span>
+            <span
+              className={`px-2 py-1 rounded ${trafficLive ? 'bg-green-700' : 'bg-yellow-800'}`}
+              title={trafficLive ? `zdroj: ${trafficSource}` : 'žádný zdroj neodpověděl'}
+            >
+              {trafficLive ? `provoz ● ${trafficSource}` : 'provoz ○ bez dat'}
+            </span>
             <input
-              type="text"
-              placeholder="Your Callsign"
               value={userCallsign}
-              onChange={(e) => setUserCallsign(e.target.value)}
-              className="px-3 py-2 bg-gray-700 rounded text-white placeholder-gray-400"
+              onChange={(e) => setUserCallsign(e.target.value.toUpperCase())}
+              placeholder="tvůj callsign"
+              className="bg-gray-700 rounded px-3 py-1.5 w-36 placeholder-gray-400"
             />
-            <select onChange={(e) => setUserRole(e.target.value)} className="px-3 py-2 bg-gray-700 rounded text-white">
-              <option value="observer">Observer</option>
-              <option value="pilot">Pilot</option>
+            <select
+              value={userRole}
+              onChange={(e) => setUserRole(e.target.value)}
+              className="bg-gray-700 rounded px-3 py-1.5"
+            >
+              <option value="pilot">pilot</option>
               <option value="atc">ATC</option>
             </select>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Main content */}
-      <div className="max-w-7xl mx-auto p-4 grid grid-cols-3 gap-4 h-[calc(100vh-80px)]">
-        {/* Radar map */}
-        <div className="col-span-2 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+      <main className="flex-1 mx-auto max-w-[1600px] w-full p-4 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
+        <section className="lg:col-span-2 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden min-h-[420px]">
           <RadarMap />
-        </div>
+        </section>
 
-        {/* Right panel */}
-        <div className="flex flex-col gap-4">
-          {/* Radio panel */}
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 flex-1 flex flex-col">
-            <RadioPanel onTransmit={handleRadioTransmit} />
+        <section className="flex flex-col gap-4 min-h-0">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 flex-1 min-h-0 flex flex-col">
+            <RadioPanel api={API} onTransmit={transmit} />
           </div>
-
-          {/* Info panel */}
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 flex-1 overflow-y-auto">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 max-h-[38%] overflow-y-auto">
             <InfoPanel />
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   );
 }
