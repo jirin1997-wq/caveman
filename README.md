@@ -35,38 +35,56 @@ Co v aplikaci **není**: žádný generátor „realistických" ATC hlášek, ž
 
 ## Spuštění
 
-### Možnost 0: Webová stránka (nic se neinstaluje)
-
-`web/index.html` je celá aplikace v jednom souboru — radar, tabule i detaily
-letadel. Otevřeš ji v prohlížeči a jede. Žádný Node, žádný build.
-
-Chceš ji mít i na vlastní adrese (pro mobil, pro čtení z práce)? Jednou zapni
-**Settings → Pages → Source: GitHub Actions**, pak se každý push sám vystaví
-přes `.github/workflows/deploy-web.yml`. To zapnutí musí udělat člověk —
-token, kterým běží workflow, Pages založit nesmí.
-
-Běží ve dvou režimech a sama pozná, ve kterém je:
-
-| | **přímý** (samotná stránka) | **backend** (+ lokální server) |
-|---|---|---|
-| Radar a provoz | ano, pokud API pustí volání z prohlížeče | ano, vždy |
-| Detaily a fotky letadel | ano, pokud API pustí volání z prohlížeče | ano, vždy |
-| **Živé ATC audio** | **ne** — odkaz na LiveATC | **ano, přímo ve stránce** |
-
-Zvuk v přímém režimu nejde a nepředstírá se, že jde: LiveATC nepouští
-přehrávání z cizích webů. Tlačítko proto vede na jejich vlastní přehrávač.
-
-Chceš zvuk ve stránce? Pusť server z tohohle repa a řekni o něm stránce:
+### Takhle. Dva příkazy, funguje všechno.
 
 ```bash
 npm install
-npm run dev:server        # poslouchá na :3001
+npm run dev:server
 ```
 
-Pak ve stránce klikni na **backend** a zadej `http://localhost:3001`
-(nebo otevři `index.html?backend=http://localhost:3001`). Adresa se pamatuje.
+Otevři **http://localhost:3001** — a je to. Radar, tabule, detaily letadel
+i **živé ATC audio**. Nic se nenastavuje: stránku servíruje ten samý server,
+který volá API, takže je to jeden origin a CORS nemá co blokovat.
 
-### Možnost 1: Stáhnout hotovou appku z GitHubu (bez terminálu)
+To je celé. Zbytek téhle sekce jsou varianty pro zvláštní případy.
+
+---
+
+### Varianta: otevřít `web/index.html` přímo ze souboru
+
+Jde to, ale je to nejslabší cesta a stojí za to vědět proč.
+
+Stránka pak nemá backend a musí na ADS-B API sáhnout sama z prohlížeče.
+Jenže dokument otevřený jako `file://` má **prázdný origin** a veřejná API
+takové volání běžně odmítnou — pak uvidíš prázdný radar a výpis, který zdroj
+selhal a proč. Není to rozbitá aplikace, je to poctivá odpověď.
+
+Zvuk tudy nejde vůbec: LiveATC nepouští přehrávání z cizích webů (CORS
++ ochrana proti hotlinkování). Místo mrtvého tlačítka je tam odkaz na jejich
+vlastní přehrávač.
+
+| | **přímý** (samotný soubor) | **backend** (`localhost:3001`) |
+|---|---|---|
+| Radar a provoz | jen když API pustí prohlížeč | vždy |
+| Detaily a fotky letadel | jen když API pustí prohlížeč | vždy |
+| **Živé ATC audio** | ne — odkaz na LiveATC | **ano, ve stránce** |
+
+Máš už server puštěný a stránku otevřenou odjinud? Klikni nahoře na
+**backend** a zadej `http://localhost:3001` (nebo otevři
+`index.html?backend=http://localhost:3001`). Adresa se pamatuje.
+
+### Varianta: vlastní veřejná adresa (GitHub Pages)
+
+Jednou zapni **Settings → Pages → Source: GitHub Actions** a každý push se sám
+vystaví přes `.github/workflows/deploy-web.yml`. To zapnutí musí udělat člověk —
+token, kterým běží workflow, Pages založit nesmí.
+
+Pozor, co tím dostaneš: Pages hostí **jen statickou stránku**, ne backend.
+Platí pro ni všechno z odstavce výše — data jen pokud je API pustí, zvuk
+odkazem. Backend veřejně nasazený být nemá: proxy na cizí ATC zvuk by z osobního
+poslechu udělala redistribuci, kterou podmínky LiveATC zakazují.
+
+### Varianta: stáhnout hotovou appku z GitHubu (bez terminálu)
 
 Nemusíš nic buildit — postaví to GitHub za tebe, na všechny tři systémy:
 
@@ -80,9 +98,14 @@ Nemusíš nic buildit — postaví to GitHub za tebe, na všechny tři systémy:
 
 Rozbalíš ZIP, spustíš — appka si sama nastartuje server i okno. Node ani terminál k tomu nepotřebuješ.
 
+> **Zatím neověřeno.** Dřívější balíček byl rozbitý: okno načítalo port 3000, kde
+> v hotové appce nic neposlouchalo. Opraveno (okno teď načítá vnitřní server na
+> 3001, stejně jako varianta výše), ale nepodařilo se mi zabalenou appku
+> odzkoušet — až ji spustíš, dej vědět, jestli naběhne.
+
 > Appka není podepsaná certifikátem (ten stojí stovky dolarů ročně). Windows ukáže „SmartScreen: neznámý vydavatel" → **Více informací → Přesto spustit**. macOS → klikni pravým a **Otevřít**.
 
-### Možnost 2: Postavit appku u sebe
+### Varianta: postavit appku u sebe
 
 ```bash
 npm install
@@ -91,26 +114,27 @@ npm run build:electron
 
 Vytvoří `dist/ATC Radio-1.0.0.AppImage` (Linux), `.exe` (Windows) nebo `.dmg` (Mac) — vždy pro systém, na kterém to pouštíš. Křížem to nejde: Windows build z Linuxu potřebuje wine, macOS build jen macOS. Proto ta CI výše.
 
-### Možnost 3: Web dev (pro vývoj)
+### Varianta: React verze (pro vývoj)
+
+Vedle jednosouborové stránky žije i původní Next.js/React aplikace — má navíc
+chat mezi uživateli, který statická verze nemá.
 
 ```bash
 npm install
 npm run dev
 ```
 
-- frontend → http://localhost:3000
+- React frontend → http://localhost:3000
 - backend → http://localhost:3001
 
-Otevři `localhost:3000`, nahoře vyber letiště, vpravo zapni `▶ poslouchat`.
-
-### Možnost 4: Electron dev (s hot reload)
+### Varianta: Electron dev
 
 ```bash
 npm install
 npm run dev:electron
 ```
 
-Otevře okno Electronu s live reloadu během vývoje.
+Spustí server a otevře nad ním okno Electronu.
 
 ---
 

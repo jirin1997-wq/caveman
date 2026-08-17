@@ -99,6 +99,19 @@ test.after(() => {
 
 // --- the tests ---------------------------------------------------------
 
+// Serving the page from the API server is what removes the CORS question
+// entirely, and it is what the desktop shell loads. An earlier build pointed
+// its window at a port nothing served, so this is pinned.
+test('GET / serves the web app from the same origin as the API', async () => {
+  const r = await fetch(`${base}/`);
+  const html = await r.text();
+
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type') || '', /text\/html/);
+  assert.match(html, /<title>ATC Radio/, 'the root must be the application page');
+  assert.match(html, /id="scope"/, 'the radar canvas must be present');
+});
+
 test('GET /api/airports lists the airports', async () => {
   const r = await fetch(`${base}/api/airports`);
   const body = await r.json();

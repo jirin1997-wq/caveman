@@ -1,14 +1,25 @@
-const { app, BrowserWindow } = require('electron');
+// Desktop shell.
+//
+// The window loads the page from our own Express server, which serves both
+// web/index.html and the API. That is the whole app in one process: no Next.js
+// server to start, no second port to coordinate, and — because page and API
+// share an origin — no CORS anywhere.
+//
+// An earlier version pointed the window at port 3000 expecting a Next server
+// there. Nothing started one in a packaged build, so the window opened on a
+// connection error. Hence the single-port design and the readiness check
+// below, which fails loudly instead of showing a blank window.
+
+const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
-const isDev = require('electron-is-dev');
 const { spawn } = require('child_process');
 const http = require('http');
 
+const PORT = Number(process.env.PORT) || 3001;
+const isDev = !app.isPackaged;
+
 let mainWindow;
 let serverProcess;
-
-const PORT = 3001;
-const FRONTEND_PORT = 3000;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -16,6 +27,7 @@ function createWindow() {
     height: 1000,
     minWidth: 1024,
     minHeight: 600,
+    backgroundColor: '#0f141b',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -23,42 +35,27 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadURL(`http://localhost:${FRONTEND_PORT}`);
-
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  mainWindow.loadURL(`http://localhost:${PORT}`);
+  if (isDev) mainWindow.webContents.openDevTools();
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-function waitForServer(port, maxAttempts = 30, delay = 500) {
+// Resolves once the server answers, rejects after the deadline. Any HTTP reply
+// counts — we only need to know something is listening.
+function waitForServer(port, attempts = 40, delayMs = 250) {
   return new Promise((resolve, reject) => {
-    let attempts = 0;
+    let left = attempts;
 
     const check = () => {
-      attempts++;
-      const req = http.get(`http://localhost:${port}`, (res) => {
-        if (res.statusCode) {
-          resolve();
-        } else {
-          if (attempts < maxAttempts) {
-            setTimeout(check, delay);
-          } else {
-            reject(new Error('Server did not start in time'));
-          }
-        }
+      const req = http.get({ host: '127.0.0.1', port, path: '/api/airports' }, (res) => {
+        res.resume();
+        resolve();
       });
-
       req.on('error', () => {
-        if (attempts < maxAttempts) {
-          setTimeout(check, delay);
-        } else {
-          reject(new Error('Server did not start in time'));
-        }
+        if (--left <= 0) return reject(new Error(`nothing listening on :${port}`));
+        setTimeout(check, delayMs);
       });
+      req.setTimeout(2000, () => req.destroy());
     };
 
     check();
@@ -66,63 +63,43 @@ function waitForServer(port, maxAttempts = 30, delay = 500) {
 }
 
 function startServer() {
-  serverProcess = spawn('node', [path.join(__dirname, 'server/index.js')], {
+  // In a packaged app there is no `node` on PATH to rely on; Electron's own
+  // binary runs the script when ELECTRON_RUN_AS_NODE is set.
+  serverProcess = spawn(process.execPath, [path.join(__dirname, 'server', 'index.js')], {
     cwd: __dirname,
-    env: { ...process.env, PORT },
+    env: { ...process.env, PORT: String(PORT), ELECTRON_RUN_AS_NODE: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  serverProcess.stdout?.on('data', (data) => {
-    console.log(`[Server] ${data}`);
-  });
-
-  serverProcess.stderr?.on('data', (data) => {
-    console.error(`[Server Error] ${data}`);
-  });
-
-  serverProcess.on('error', (err) => {
-    console.error('Failed to start server:', err);
-  });
-
-  return serverProcess;
+  serverProcess.stdout?.on('data', (d) => console.log(`[server] ${d}`.trimEnd()));
+  serverProcess.stderr?.on('data', (d) => console.error(`[server] ${d}`.trimEnd()));
+  serverProcess.on('error', (err) => console.error('[server] failed to spawn:', err));
 }
 
 app.on('ready', async () => {
   startServer();
-
   try {
-    // Wait for backend server to be ready
     await waitForServer(PORT);
-    console.log(`[Main] Backend ready on port ${PORT}`);
-
-    // Wait a bit for frontend in dev mode
-    if (isDev) {
-      console.log(`[Main] Waiting for frontend on port ${FRONTEND_PORT}...`);
-      await waitForServer(FRONTEND_PORT, 60, 1000);
-    }
-
     createWindow();
   } catch (err) {
-    console.error('Failed to start app:', err);
-    if (mainWindow) mainWindow.close();
+    dialog.showErrorBox(
+      'ATC Radio se nepodařilo spustit',
+      `Vnitřní server nenaběhl na portu ${PORT}.\n\n${err.message}\n\n` +
+        `Nejčastější příčina je, že port už používá jiný program. ` +
+        `Zavři ho a zkus to znovu.`
+    );
     app.quit();
   }
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('activate', () => {
-  if (mainWindow === null) {
-    createWindow();
-  }
+  if (mainWindow === null) createWindow();
 });
 
 app.on('before-quit', () => {
-  if (serverProcess && !serverProcess.killed) {
-    serverProcess.kill();
-  }
+  if (serverProcess && !serverProcess.killed) serverProcess.kill();
 });

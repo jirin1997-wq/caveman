@@ -507,14 +507,31 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 /* ------------------------------------------------------------ detekce módu */
-async function probeBackend() {
-  if (!state.backend) { state.backendOk = false; return; }
+async function reachable(base) {
   try {
-    await getJSON(`${state.backend}/api/airports`, 4000);
-    state.backendOk = true;
+    await getJSON(`${base}/api/airports`, 4000);
+    return true;
   } catch {
-    state.backendOk = false;
+    return false;
   }
+}
+
+async function probeBackend() {
+  if (state.backend && await reachable(state.backend)) {
+    state.backendOk = true;
+    return;
+  }
+
+  // Když stránku servíruje samotný backend (npm run dev:server, desktopová
+  // appka), je na stejném originu — pak není co nastavovat a zvuk jede rovnou.
+  // Na statickém hostingu tenhle dotaz vrátí 404 a spadne se do přímého režimu.
+  if (/^https?:$/.test(location.protocol) && await reachable(location.origin)) {
+    state.backend = location.origin;
+    state.backendOk = true;
+    return;
+  }
+
+  state.backendOk = false;
 }
 
 /* ------------------------------------------------------------------ radar */

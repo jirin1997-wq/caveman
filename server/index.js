@@ -1,4 +1,5 @@
 const http = require('http');
+const path = require('path');
 const express = require('express');
 const { WebSocketServer } = require('ws');
 
@@ -29,6 +30,16 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+
+// Serve the standalone page from this same server, so opening
+// http://localhost:3001 gives the whole application.
+//
+// This is the reliable way to run it. A page opened as a file:// document has
+// an opaque origin and a static host is a foreign one, so both depend on the
+// upstream APIs allowing cross-origin reads — which they need not do. Served
+// from here, the page and the API share an origin, and the API calls happen
+// server-side where the browser's rules do not apply at all.
+app.use(express.static(path.join(__dirname, '..', 'web')));
 
 // --- REST ---------------------------------------------------------------
 

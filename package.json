@@ -13,10 +13,9 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
     "dev:server": "node --watch server/index.js",
     "dev:web": "next dev",
-    "dev:electron": "concurrently \"npm run dev:server\" \"npm run dev:next\" \"wait-on http://localhost:3000 && electron .\"",
-    "dev:next": "next dev",
+    "dev:electron": "concurrently \"npm run dev:server\" \"wait-on http://localhost:3001/api/airports && electron .\"",
     "build": "next build",
-    "build:electron": "npm run build && electron-builder",
+    "build:electron": "electron-builder",
     "start": "next start",
     "electron": "electron .",
     "test": "node --test tests/*.test.js",
@@ -53,11 +52,11 @@
       "electron-main.js",
       "preload.js",
       "server/**/*",
-      ".next/standalone/**/*",
-      ".next/static/**/*",
+      "web/**/*",
       "package.json",
       "node_modules/**/*"
     ],
+    "asar": false,
     "directories": {
       "buildResources": "assets",
       "output": "dist"
