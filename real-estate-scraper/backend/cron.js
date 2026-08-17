@@ -1,20 +1,33 @@
 import schedule from 'node-schedule';
 import db from './db/index.js';
 import { scrapeSreality } from './scrapers/sreality.js';
+import { scrapeIdnes } from './scrapers/idnes.js';
+import { scrapeBezrealitky } from './scrapers/bezrealitky.js';
+import { scrapeDevelopers } from './scrapers/developers.js';
 import { writeSnapshot } from './jobs/snapshot.js';
 
 /**
- * Denní běh: nejdřív stáhnout inzeráty, pak z nich udělat snímek trhu.
+ * Denní běh: všechny scrapery, pak snímek trhu.
  * Pořadí je důležité — snímek musí vidět čerstvá data.
+ * MVP: jen Praha zatím.
  */
 export async function runDaily() {
   const started = Date.now();
   console.log(`[CRON] Start ${new Date().toISOString()}`);
 
-  try {
-    await scrapeSreality();
-  } catch (err) {
-    console.error('[CRON] Scraper selhal:', err.message);
+  const scrapers = [
+    { name: 'Sreality', fn: scrapeSreality },
+    { name: 'iDNES Reality', fn: scrapeIdnes },
+    { name: 'Bezrealitky', fn: scrapeBezrealitky },
+    { name: 'Developeři', fn: () => scrapeDevelopers('praha') }
+  ];
+
+  for (const scraper of scrapers) {
+    try {
+      await scraper.fn();
+    } catch (err) {
+      console.error(`[CRON] ${scraper.name} selhal:`, err.message);
+    }
   }
 
   try {
