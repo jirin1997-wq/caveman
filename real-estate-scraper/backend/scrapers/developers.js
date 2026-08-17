@@ -1,7 +1,7 @@
-import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
+import { fetchHtml, SourceError, sleep } from './http.js';
 
 /**
  * Agregátor webů velkých developerů v ČR (Trigema, Central Group, Ekospol).
@@ -20,7 +20,8 @@ import { saveBatch } from './store.js';
  */
 
 const DELAY_MS = 1500;
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const HINT = 'Selektory nejspíš nesedí. Spusť `npm run probe` — uloží HTML do '
+  + 'probe-output/, v něm najdi skutečné třídy a přepiš příslušný parse*().';
 
 const DEVELOPERS = {
   trigema: {
@@ -40,15 +41,7 @@ const DEVELOPERS = {
   }
 };
 
-async function fetchPage(url) {
-  const { data } = await axios.get(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; RealityScout/0.1)'
-    },
-    timeout: Number(process.env.SCRAPER_TIMEOUT) || 30000
-  });
-  return data;
-}
+const fetchPage = (url, source) => fetchHtml({ source, url, hint: HINT });
 
 // Trigema parser
 function parseTrigema(html) {
@@ -153,40 +146,50 @@ function toDBListing(item, source, sourceName, city) {
 
 async function scrapeDeveloper(devKey, devConfig, city) {
   console.log(`  ${devConfig.name}…`);
-  const collected = [];
 
-  try {
-    const html = await fetchPage(devConfig.listingsUrl);
-    const items = devConfig.parser(html);
+  const html = await fetchPage(devConfig.listingsUrl, devConfig.name);
+  const items = devConfig.parser(html);
 
-    for (const item of items) {
-      const listing = toDBListing(item, devKey, devConfig.name, city);
-      if (listing) collected.push(listing);
-    }
-
-    await sleep(DELAY_MS);
-  } catch (err) {
-    console.error(`    ✗ ${err.message}`);
+  // Stránka se načetla, ale selektory nic nenašly — to je chyba parseru,
+  // ne prázdná nabídka. Kdysi to prošlo tiše jako „0 inzerátů".
+  if (items.length === 0) {
+    throw new SourceError(
+      `stránka se načetla (${html.length} B), ale selektory nenašly ani jednu nemovitost`,
+      { source: devConfig.name, url: devConfig.listingsUrl, hint: HINT }
+    );
   }
 
+  const collected = [];
+  for (const item of items) {
+    const listing = toDBListing(item, devKey, devConfig.name, city);
+    if (listing) collected.push(listing);
+  }
+
+  await sleep(DELAY_MS);
+  console.log(`    ${collected.length} nemovitostí`);
   return collected;
 }
 
 export async function scrapeDevelopers(city = 'praha') {
   console.log('🏗️  Developeři scraper start');
   const allListings = [];
+  const errors = [];
 
   for (const [devKey, devConfig] of Object.entries(DEVELOPERS)) {
     try {
-      const listings = await scrapeDeveloper(devKey, devConfig, city);
-      allListings.push(...listings);
+      allListings.push(...(await scrapeDeveloper(devKey, devConfig, city)));
     } catch (err) {
-      console.error(`✗ ${devConfig.name}: ${err.message}`);
+      const msg = err instanceof SourceError ? err.format() : `${devConfig.name}: ${err.message}`;
+      console.error(`  ✗ ${msg}`);
+      errors.push(msg);
     }
   }
 
   console.log(`  staženo ${allListings.length} inzerátů celkem`);
-  return saveBatch(allListings, 'developers:');
+  const stats = await saveBatch(allListings, 'developers:');
+  const ok = allListings.length > 0;
+  console.log(ok ? '✓ Developeři hotovo' : '✗ Developeři nepřinesli žádná data');
+  return { source: 'Developeři', ok, stats, errors };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

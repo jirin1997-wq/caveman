@@ -1,6 +1,6 @@
-import axios from 'axios';
 import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
+import { fetchJsonPage, SourceError, sleep } from './http.js';
 
 /**
  * iDNES Reality.
@@ -23,29 +23,17 @@ const PER_PAGE = 30;
 const MAX_PAGES = 50;
 const DELAY_MS = 1000;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const HINT = 'Ověř tvar odpovědi: npm run probe — surová data pak najdeš v probe-output/idnes.json';
 
-async function fetchPage(regionId, page) {
-  const { data } = await axios.get(API, {
-    params: {
-      regionId,
-      page,
-      limit: PER_PAGE,
-      type: 'byt',
-      transaction: 'prodej',
-      maxPrice: null
-    },
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; RealityScout/0.1)',
-      Accept: 'application/json'
-    },
-    timeout: Number(process.env.SCRAPER_TIMEOUT) || 30000
+function fetchPage(regionId, page) {
+  return fetchJsonPage({
+    source: 'iDNES Reality',
+    url: API,
+    params: { regionId, page, limit: PER_PAGE, type: 'byt', transaction: 'prodej' },
+    itemsPath: 'result.items',
+    totalPath: 'result.total',
+    hint: HINT
   });
-
-  return {
-    items: data?.result?.items || [],
-    total: data?.result?.total ?? 0
-  };
 }
 
 function mapEstate(estate, city, cityName) {
@@ -97,11 +85,12 @@ async function scrapeCity(city, cityName, regionId) {
     try {
       result = await fetchPage(regionId, page);
     } catch (err) {
-      console.error(`  ✗ strana ${page}: ${err.message}`);
+      if (page === 1) throw err; // zdroj je rozbitý, ne jen krátký
+      console.warn(`  ! strana ${page} selhala (${err.message}) — beru, co mám`);
       break;
     }
 
-    if (!result.items || result.items.length === 0) break;
+    if (result.items.length === 0) break;
 
     for (const estate of result.items) {
       const listing = mapEstate(estate, city, cityName);
@@ -112,8 +101,14 @@ async function scrapeCity(city, cityName, regionId) {
     await sleep(DELAY_MS);
   }
 
+  if (collected.length === 0) {
+    console.warn(`  ! ${city}: zdroj odpověděl, ale mapování nevyrobilo žádný inzerát`);
+    console.warn(`    ${HINT}`);
+  }
+
   console.log(`  staženo ${collected.length} inzerátů`);
-  return saveBatch(collected, `${city}:`);
+  const stats = await saveBatch(collected, `${city}:`);
+  return { city, ok: collected.length > 0, stats };
 }
 
 export async function scrapeIdnes() {
@@ -123,15 +118,23 @@ export async function scrapeIdnes() {
     .map((c) => c.trim())
     .filter((c) => CITIES[c]);
 
+  const results = [];
+  const errors = [];
+
   for (const city of cities) {
     try {
       const config = CITIES[city];
-      await scrapeCity(city, config.name, config.regionId);
+      results.push(await scrapeCity(city, config.name, config.regionId));
     } catch (err) {
-      console.error(`✗ ${city}: ${err.message}`);
+      const msg = err instanceof SourceError ? err.format() : `${city}: ${err.message}`;
+      console.error(`✗ ${msg}`);
+      errors.push(msg);
     }
   }
-  console.log('✓ iDNES Reality scraper hotov');
+
+  const ok = results.some((r) => r.ok);
+  console.log(ok ? '✓ iDNES Reality hotovo' : '✗ iDNES Reality nepřineslo žádná data');
+  return { source: 'iDNES Reality', ok, cities: results, errors };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

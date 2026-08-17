@@ -3,3 +3,6 @@ dist/
 .env
 .env.local
 *.log
+
+# Surové odpovědi zdrojů z `npm run probe` — diagnostika, ne zdrojový kód
+probe-output/

@@ -1,6 +1,6 @@
-import axios from 'axios';
 import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
+import { fetchJsonPage, SourceError, sleep } from './http.js';
 
 /**
  * Bezrealitky.cz.
@@ -24,28 +24,18 @@ const PER_PAGE = 50;
 const MAX_PAGES = 30;
 const DELAY_MS = 800;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const HINT = 'Tenhle zdroj nejspíš jede na GraphQL — otevři si síťovou kartu na bezrealitky.cz '
+  + 'a odchyť skutečný dotaz. Pak přepiš fetchPage(). Rychlá diagnóza: npm run probe';
 
-async function fetchPage(city, page) {
-  const { data } = await axios.get(API, {
-    params: {
-      city,
-      type: 'flat',
-      transaction: 'sale',
-      page,
-      limit: PER_PAGE
-    },
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; RealityScout/0.1)',
-      Accept: 'application/json'
-    },
-    timeout: Number(process.env.SCRAPER_TIMEOUT) || 30000
+function fetchPage(city, page) {
+  return fetchJsonPage({
+    source: 'Bezrealitky',
+    url: API,
+    params: { city, type: 'flat', transaction: 'sale', page, limit: PER_PAGE },
+    itemsPath: 'data',
+    totalPath: 'pagination.total',
+    hint: HINT
   });
-
-  return {
-    items: data?.data || [],
-    total: data?.pagination?.total ?? 0
-  };
 }
 
 function mapEstate(estate, city) {
@@ -100,11 +90,12 @@ async function scrapeCity(city, cityName) {
     try {
       result = await fetchPage(city, page);
     } catch (err) {
-      console.error(`  ✗ strana ${page}: ${err.message}`);
+      if (page === 1) throw err; // zdroj je rozbitý, ne jen krátký
+      console.warn(`  ! strana ${page} selhala (${err.message}) — beru, co mám`);
       break;
     }
 
-    if (!result.items || result.items.length === 0) break;
+    if (result.items.length === 0) break;
 
     for (const estate of result.items) {
       const listing = mapEstate(estate, city);
@@ -115,8 +106,14 @@ async function scrapeCity(city, cityName) {
     await sleep(DELAY_MS);
   }
 
+  if (collected.length === 0) {
+    console.warn(`  ! ${cityName}: zdroj odpověděl, ale mapování nevyrobilo žádný inzerát`);
+    console.warn(`    ${HINT}`);
+  }
+
   console.log(`  staženo ${collected.length} inzerátů`);
-  return saveBatch(collected, `${city}:`);
+  const stats = await saveBatch(collected, `${city}:`);
+  return { city, ok: collected.length > 0, stats };
 }
 
 export async function scrapeBezrealitky() {
@@ -126,16 +123,23 @@ export async function scrapeBezrealitky() {
     .map((c) => c.trim())
     .filter((c) => CITIES[c]);
 
+  const results = [];
+  const errors = [];
+
   for (const city of cities) {
     try {
-      const cityCode = CITIES[city];
       const cityName = city === 'praha' ? 'Praha' : 'Brno';
-      await scrapeCity(cityCode, cityName);
+      results.push(await scrapeCity(CITIES[city], cityName));
     } catch (err) {
-      console.error(`✗ ${city}: ${err.message}`);
+      const msg = err instanceof SourceError ? err.format() : `${city}: ${err.message}`;
+      console.error(`✗ ${msg}`);
+      errors.push(msg);
     }
   }
-  console.log('✓ Bezrealitky scraper hotov');
+
+  const ok = results.some((r) => r.ok);
+  console.log(ok ? '✓ Bezrealitky hotovo' : '✗ Bezrealitky nepřineslo žádná data');
+  return { source: 'Bezrealitky', ok, cities: results, errors };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

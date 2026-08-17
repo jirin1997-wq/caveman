@@ -1,6 +1,7 @@
-import axios from 'axios';
 import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
+import { fetchJsonPage, SourceError, sleep } from './http.js';
+import { SREALITY_REGIONS } from './shape.js';
 
 /**
  * Sreality má veřejné JSON API, které pohání jejich vlastní web.
@@ -20,20 +21,19 @@ import { saveBatch } from './store.js';
 
 const API = 'https://www.sreality.cz/api/cs/v2/estates';
 
-const REGIONS = {
-  praha: 10,
-  brno: 14 // Jihomoravský kraj
-};
+const REGIONS = SREALITY_REGIONS;
 
 const PER_PAGE = 60;
 const MAX_PAGES = 20;          // strop, ať jeden běh netrvá hodiny
 const DELAY_MS = 1200;         // šetrné tempo vůči serveru
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const HINT = 'Ověř tvar odpovědi: npm run probe — surová data pak najdeš v probe-output/sreality.json';
 
-/** Jedna stránka výsledků. Vrací pole surových záznamů. */
-async function fetchPage(regionId, page) {
-  const { data } = await axios.get(API, {
+/** Jedna stránka výsledků. Vyhodí SourceError, když zdroj neodpoví v očekávaném tvaru. */
+function fetchPage(regionId, page) {
+  return fetchJsonPage({
+    source: 'Sreality',
+    url: API,
     params: {
       category_main_cb: 1,
       category_type_cb: 1,
@@ -41,18 +41,10 @@ async function fetchPage(regionId, page) {
       per_page: PER_PAGE,
       page
     },
-    headers: {
-      // Sreality odmítá požadavky bez běžné hlavičky prohlížeče.
-      'User-Agent': 'Mozilla/5.0 (compatible; RealityScout/0.1)',
-      Accept: 'application/json'
-    },
-    timeout: Number(process.env.SCRAPER_TIMEOUT) || 30000
+    itemsPath: '_embedded.estates',
+    totalPath: 'result_size',
+    hint: HINT
   });
-
-  return {
-    estates: data?._embedded?.estates || [],
-    total: data?.result_size ?? 0
-  };
 }
 
 /** Převede záznam z API na normalizovaný tvar. */
@@ -96,13 +88,17 @@ async function scrapeCity(city, regionId) {
     try {
       result = await fetchPage(regionId, page);
     } catch (err) {
-      console.error(`  ✗ strana ${page}: ${err.message}`);
-      break; // dál nemá smysl pokračovat, zdroj je nedostupný
+      // První stránka je ověření zdroje — když neprojde, je zdroj rozbitý
+      // a musí se to dozvědět volající. Výpadek na dalších stránkách
+      // znamená jen kratší dávku, s tím se dá pracovat.
+      if (page === 1) throw err;
+      console.warn(`  ! strana ${page} selhala (${err.message}) — beru, co mám`);
+      break;
     }
 
-    if (result.estates.length === 0) break;
+    if (result.items.length === 0) break;
 
-    for (const estate of result.estates) {
+    for (const estate of result.items) {
       const listing = mapEstate(estate, city);
       if (listing) collected.push(listing);
     }
@@ -111,10 +107,21 @@ async function scrapeCity(city, regionId) {
     await sleep(DELAY_MS);
   }
 
+  // Zdroj odpověděl, ale nic použitelného z něj nevypadlo — to je taky nález.
+  if (collected.length === 0) {
+    console.warn(`  ! ${city}: zdroj odpověděl, ale mapování nevyrobilo žádný inzerát`);
+    console.warn(`    ${HINT}`);
+  }
+
   console.log(`  staženo ${collected.length} inzerátů`);
-  return saveBatch(collected, `${city}:`);
+  const stats = await saveBatch(collected, `${city}:`);
+  return { city, ok: collected.length > 0, stats };
 }
 
+/**
+ * @returns {Promise<{source:string, ok:boolean, cities:object[], errors:string[]}>}
+ *   `ok` je true, jen když aspoň jedno město něco přineslo.
+ */
 export async function scrapeSreality() {
   console.log('🔍 Sreality scraper start');
   const cities = (process.env.SCRAPER_CITIES || 'praha,brno')
@@ -122,14 +129,22 @@ export async function scrapeSreality() {
     .map((c) => c.trim())
     .filter((c) => REGIONS[c]);
 
+  const results = [];
+  const errors = [];
+
   for (const city of cities) {
     try {
-      await scrapeCity(city, REGIONS[city]);
+      results.push(await scrapeCity(city, REGIONS[city]));
     } catch (err) {
-      console.error(`✗ ${city}: ${err.message}`);
+      const msg = err instanceof SourceError ? err.format() : `${city}: ${err.message}`;
+      console.error(`✗ ${msg}`);
+      errors.push(msg);
     }
   }
-  console.log('✓ Sreality scraper hotov');
+
+  const ok = results.some((r) => r.ok);
+  console.log(ok ? '✓ Sreality hotovo' : '✗ Sreality nepřineslo žádná data');
+  return { source: 'Sreality', ok, cities: results, errors };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -82,16 +82,50 @@ podle očekávaného tvaru, ne podle skutečné odpovědi serveru.
 | Bezrealitky.cz | `api/v2/estates` | **Nízká** — endpoint je odhad. Bezrealitky podle všeho jedou na GraphQL, takže tenhle REST tvar nejspíš neexistuje. |
 | Weby developerů | CSS selektory | **Nízká** — selektory (`[data-project-item]`, `.ekospolProperty`…) jsou vymyšlené, ne odečtené z HTML. |
 
-Ověření musí proběhnout na stroji bez těchhle síťových omezení:
+Ověření musí proběhnout na stroji bez těchhle síťových omezení. Na to je
+`npm run probe` — jeden dotaz na každý zdroj, nic se neukládá do databáze:
 
 ```bash
-npm run scrape:sreality   # začni tímhle, má nejvyšší šanci projít
+npm run probe          # všechny zdroje, Praha
+npm run probe -- brno  # jiné město
 ```
 
-Když zdroj vrátí nula inzerátů nebo spadne na parsování, otevři si odpověď
-serveru a srovnej ji s mapovací funkcí v příslušném souboru
-(`mapEstate` v `backend/scrapers/<zdroj>.js`). Parsovací vrstva
-(`normalize.js`) je otestovaná a sdílená, takže se obvykle mění jen mapování.
+U každého zdroje vypíše, jestli odpověděl, jestli sedí očekávaný tvar
+a **která konkrétní pole chybí**. Surové odpovědi ukládá do `probe-output/`,
+takže mapování se opravuje podle skutečných dat, ne podle dohadů:
+
+```
+✗ Bezrealitky (bezrealitky)
+   odpověď není JSON (přišlo HTML — endpoint nejspíš neexistuje)
+   surová odpověď: probe-output/bezrealitky.json
+   oprav: backend/scrapers/bezrealitky.js → mapEstate()
+```
+
+Parsovací vrstva (`normalize.js`) je otestovaná a sdílená mezi zdroji,
+takže se obvykle mění jen mapovací funkce, ne parsování.
+
+Když ti `locality_region_id` u Sreality nesedí (Brno je nejistá konstanta),
+jde přebít bez sahání do kódu:
+
+```bash
+SREALITY_REGION_BRNO=20 npm run probe -- brno
+```
+
+### Selhání je poznat
+
+Scrapery nesmí selhat potichu. Nedostupný zdroj i zdroj, jehož tvar
+odpovědi se změnil, končí popsanou chybou; noční běh vypíše souhrn
+a skončí **nenulovým kódem**, když nepřinesl data ani jeden zdroj:
+
+```
+[CRON] Souhrn:
+  ✓ Sreality
+  ✗ Bezrealitky — 1 chyba
+[CRON] ŽÁDNÝ ZDROJ NEPŘINESL DATA. Diagnostika: npm run probe
+```
+
+Snímek trhu se v takovém běhu přeskočí, aby prázdná dávka nepřepsala
+poslední dobrá čísla.
 
 Denní běh ve 2:00 zajišťuje `backend/cron.js`. Na serveru ho spusť jako
 službu (`node backend/cron.js`) nebo nech plánovat systémovým cronem.
