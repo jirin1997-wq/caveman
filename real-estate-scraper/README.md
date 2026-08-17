@@ -59,10 +59,20 @@ npm run dev
 ## Stažení reálných dat
 
 ```bash
-npm run scrape          # scrape + snímek trhu (co dělá i noční cron)
+npm run scrape          # všechny zdroje + snímek trhu (co dělá i noční cron)
+npm run scrape:all      # alias pro scrape
 npm run scrape:sreality # jen Sreality
+npm run scrape:idnes    # jen iDNES Reality
+npm run scrape:bezrealitky # jen Bezrealitky
+npm run scrape:developers  # jen developer websites (Praha)
 npm run snapshot        # jen přepočet snímku trhu
 ```
+
+**Zdroje dat** — MVP sbírá z čtyř kanálů:
+- **Sreality.cz** — JSON API
+- **iDNES Reality** — JSON API
+- **Bezrealitky.cz** — JSON API
+- **Developer websites** — Trigema, Central Group, Ekospol (HTML parsing)
 
 Denní běh ve 2:00 zajišťuje `backend/cron.js`. Na serveru ho spusť jako
 službu (`node backend/cron.js`) nebo nech plánovat systémovým cronem.
@@ -88,7 +98,10 @@ backend/
 ├── scrapers/
 │   ├── normalize.js       Čisté parsovací funkce (testované)
 │   ├── store.js           Ukládání + historie cen
-│   └── sreality.js        Sreality přes veřejné JSON API
+│   ├── sreality.js        Sreality přes JSON API
+│   ├── idnes.js           iDNES Reality přes JSON API
+│   ├── bezrealitky.js     Bezrealitky přes JSON API
+│   └── developers.js      Weby developerů (Trigema, Central Group, Ekospol)
 ├── jobs/snapshot.js       Denní snímek mediánů trhu
 ├── db/
 │   ├── migrations/        Schéma
@@ -125,9 +138,12 @@ frontend/src/
 
 ## Co ještě chybí
 
-- [ ] iDNES reality, Bezrealitky
-- [ ] Weby developerů (Trigema, Central Group, Ekospol…)
+- [x] iDNES Reality, Bezrealitky
+- [x] Weby developerů (Trigema, Central Group, Ekospol…)
+- [ ] Další developery (Vue Development, Central Group-projekty, atd.)
+- [ ] Rozšíření na Brno a další krajská města
 - [ ] Reálné referenční nájmy místo odhadu z kupních cen
 - [ ] Hlídací pes — upozornění na nový nebo zlevněný inzerát
 - [ ] Data z katastru pro realizované (ne nabídkové) ceny
-- [ ] Nasazení
+- [ ] Deduplikace přes více zdrojů (stejná nemovitost od několika web…)
+- [ ] Nasazení na produkční server
