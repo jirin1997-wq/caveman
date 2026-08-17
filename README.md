@@ -35,6 +35,32 @@ Co v aplikaci **není**: žádný generátor „realistických" ATC hlášek, ž
 
 ## Spuštění
 
+### Možnost 0: Webová stránka (nic se neinstaluje)
+
+`web/index.html` je celá aplikace v jednom souboru — radar, tabule i detaily
+letadel. Otevřeš ji v prohlížeči a jede. Žádný Node, žádný build.
+
+Běží ve dvou režimech a sama pozná, ve kterém je:
+
+| | **přímý** (samotná stránka) | **backend** (+ lokální server) |
+|---|---|---|
+| Radar a provoz | ano, pokud API pustí volání z prohlížeče | ano, vždy |
+| Detaily a fotky letadel | ano, pokud API pustí volání z prohlížeče | ano, vždy |
+| **Živé ATC audio** | **ne** — odkaz na LiveATC | **ano, přímo ve stránce** |
+
+Zvuk v přímém režimu nejde a nepředstírá se, že jde: LiveATC nepouští
+přehrávání z cizích webů. Tlačítko proto vede na jejich vlastní přehrávač.
+
+Chceš zvuk ve stránce? Pusť server z tohohle repa a řekni o něm stránce:
+
+```bash
+npm install
+npm run dev:server        # poslouchá na :3001
+```
+
+Pak ve stránce klikni na **backend** a zadej `http://localhost:3001`
+(nebo otevři `index.html?backend=http://localhost:3001`). Adresa se pamatuje.
+
 ### Možnost 1: Stáhnout hotovou appku z GitHubu (bez terminálu)
 
 Nemusíš nic buildit — postaví to GitHub za tebe, na všechny tři systémy:
@@ -83,16 +109,18 @@ Otevře okno Electronu s live reloadu během vývoje.
 
 ---
 
-## Proč to musí běžet lokálně
+## Proč audio potřebuje backend
 
-Prohlížeč si audio z LiveATC nestáhne sám — brání tomu CORS a ochrana proti hotlinkování. Proto stream stahuje **Node backend** a posílá ho dál do tvého prohlížeče:
+Prohlížeč si zvuk z LiveATC nestáhne sám — brání tomu CORS a ochrana proti hotlinkování. Proto stream stahuje **Node backend** a posílá ho dál do tvého prohlížeče:
 
 ```
 LiveATC.net ──▶ tvůj Node server ──▶ tvůj prohlížeč
              (server-side fetch)   (jen localhost, žádné CORS)
 ```
 
-Stejný důvod platí pro ADS-B API. Cokoliv hostovaného v prohlížeči bez vlastního backendu (např. statická stránka) tohle udělat nemůže.
+Statická stránka bez backendu tohle udělat nemůže — proto v přímém režimu odkazuje na přehrávač LiveATC místo toho, aby předstírala vlastní.
+
+U ADS-B je to otevřenější: některá API volání z prohlížeče pouštějí, jiná ne, a nedá se to slíbit dopředu. Stránka to proto zkusí a když ji CORS zastaví, **napíše to** — místo aby ukázala prázdný radar bez vysvětlení.
 
 ---
 
@@ -112,7 +140,7 @@ Když LiveATC pro dané letiště feed nemá, UI to napíše. To je legitimní o
 
 LKPR Praha/Ruzyně · LKTB Brno · LKMT Ostrava · EDDF Frankfurt · EHAM Amsterdam · EGLL Heathrow · LOWW Wien · KJFK New York
 
-Přidání dalšího = jeden řádek v `server/airports.js` (ICAO + souřadnice). Frekvence se nezadávají ručně — přebírají se z LiveATC, aby v aplikaci nemohla být špatná frekvence.
+Přidání dalšího = jeden řádek v `server/airports.js` **a v `web/index.html`** (ICAO + souřadnice); test hlídá, že se ty dva seznamy shodují. Frekvence se nezadávají ručně — přebírají se z LiveATC, aby v aplikaci nemohla být špatná frekvence.
 
 ---
 
@@ -122,7 +150,7 @@ Přidání dalšího = jeden řádek v `server/airports.js` (ICAO + souřadnice)
 npm test
 ```
 
-35 testů, doběhnou za necelou vteřinu, **žádný nepotřebuje síť**. Testuje se to, kde bugy skutečně bývají — parsování cizích dat:
+44 testů, doběhnou za necelou vteřinu, **žádný nepotřebuje síť**. Testuje se to, kde bugy skutečně bývají — parsování cizích dat:
 
 - rozbor stránky LiveATC a `.pls` playlistu (včetně případu „letiště feed nemá")
 - zařazení feedů do pozic podle id i podle popisku
@@ -130,14 +158,17 @@ npm test
 - dekódování nouzových squawků a kategorií
 - geometrie tabule: že brněnské letadlo nespadne do pražského „na zemi"
 - celá HTTP cesta proti podvržené síti, včetně toho, že **výpadek zdroje vrátí `live:false` s důvody, ne vymyšlený provoz**
+- že webová verze počítá **úplně stejně jako server** — stejná letiště, stejná normalizace, stejné zařazení do tabule
 
-Poslední jmenovaný test je tam schválně — je to pojistka přesně proti té chybě, kterou dřívější verze téhle aplikace dělala.
+Poslední dva jsou tam schválně. Ten první je pojistka přesně proti chybě, kterou dřívější verze téhle aplikace dělala. Ten druhý hlídá, že se kopie logiky v `web/index.html` časem tiše nerozejde se serverem — obě obrazovky by dál fungovaly, jen by o stejném letadle tvrdily každá něco jiného.
 
 ---
 
 ## Struktura
 
 ```
+web/
+  index.html        celá webová verze v jednom souboru (bez buildu)
 server/
   airports.js       letiště (ICAO + souřadnice, nic víc)
   liveatc.js        hledání feedů + rozbalení .pls na adresu streamu

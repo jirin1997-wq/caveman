@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATC Radio — živý provoz</title>
+<style>
+  :root {
+    --bg: #0f141b;
+    --panel: #1a212b;
+    --panel-2: #222b38;
+    --line: #2e3947;
+    --text: #e7edf5;
+    --dim: #93a3b8;
+    --dimmer: #6b7a8d;
+    --accent: #4d96ff;
+    --ok: #3fa96a;
+    --warn: #b58a1b;
+    --bad: #c1443f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  button, select, input { font: inherit; color: inherit; }
+
+  /* ---------- header ---------- */
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .brand { font-size: 17px; font-weight: 700; letter-spacing: .2px; }
+  .ctl {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 10px;
+  }
+  .pill {
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .pill.ok   { background: #123a25; color: #86e0ab; }
+  .pill.warn { background: #3a2f0e; color: #f0d284; }
+  .pill.bad  { background: #3d1a19; color: #f0a09c; }
+
+  /* ---------- layout ---------- */
+  main {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 12px;
+    padding: 12px;
+    align-items: start;
+  }
+  @media (max-width: 1200px) { main { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 800px)  { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .panel > h2 {
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--dim);
+    border-bottom: 1px solid var(--line);
+  }
+  .panel > .body { padding: 12px; }
+
+  /* ---------- notice ---------- */
+  .notice {
+    margin: 0 12px 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    font-size: 13px;
+    color: var(--dim);
+  }
+  .notice.bad  { border-color: #5d2b28; background: #241514; color: #f0b8b5; }
+  .notice.warn { border-color: #5c4a15; background: #201c10; color: #eed79a; }
+  .notice b { color: var(--text); }
+  .notice code {
+    background: #0d1218;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .notice ul { margin: 6px 0 0; padding-left: 18px; }
+
+  /* ---------- radar ---------- */
+  #scope { display: block; width: 100%; height: auto; background: #080c11; cursor: crosshair; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--dimmer);
+    border-top: 1px solid var(--line);
+  }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+
+  /* ---------- tabs / board ---------- */
+  .tabs { display: flex; gap: 4px; padding: 8px 8px 0; flex-wrap: wrap; }
+  .tab {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px 6px 0 0;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 13px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] {
+    background: var(--panel-2);
+    border-color: var(--line);
+    border-bottom-color: var(--panel-2);
+    color: var(--text);
+  }
+  .rows { max-height: 460px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--dimmer);
+    font-weight: 600;
+    padding: 8px 10px;
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+  }
+  td { padding: 7px 10px; border-top: 1px solid var(--line); }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--panel-2); }
+  tbody tr[aria-selected="true"] { background: #1d3255; }
+  .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .empty { padding: 18px 12px; color: var(--dimmer); font-size: 13px; }
+
+  /* ---------- detail ---------- */
+  .photo { width: 100%; border-radius: 8px; display: block; background: #0d1218; }
+  .credit { font-size: 11px; color: var(--dimmer); margin: 4px 0 12px; }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; }
+  dt { color: var(--dimmer); }
+  dd { margin: 0; text-align: right; }
+  .callsign { font-size: 22px; font-weight: 700; letter-spacing: .5px; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 12px; }
+  .alarm {
+    background: #3d1a19;
+    color: #ffb3ae;
+    border: 1px solid #6d2f2b;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-weight: 700;
+    margin: 10px 0;
+    text-align: center;
+    letter-spacing: .05em;
+  }
+  a { color: var(--accent); }
+  .btn {
+    display: inline-block;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .muted { color: var(--dimmer); font-size: 12px; }
+  audio { width: 100%; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span class="brand">🛩️ ATC Radio</span>
+    <select id="airport" class="ctl"></select>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span id="pill-mode" class="pill warn">režim…</span>
+    <span id="pill-traffic" class="pill warn">provoz ○ načítám</span>
+    <button id="btn-backend" class="ctl" style="cursor:pointer">backend…</button>
+  </div>
+</header>
+
+<div id="notice-host"></div>
+
+<main>
+  <section class="panel">
+    <h2>Radar — dosah <span id="range-label">90</span> km</h2>
+    <canvas id="scope" width="900" height="900"></canvas>
+    <div class="legend">
+      <span><i style="background:#c07cd8"></i>na zemi</span>
+      <span><i style="background:#ff6b6b"></i>&lt; 2 000 ft</span>
+      <span><i style="background:#ffd93d"></i>&lt; 10 000 ft</span>
+      <span><i style="background:#6bcf7f"></i>&lt; 25 000 ft</span>
+      <span><i style="background:#4d96ff"></i>≥ 25 000 ft</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Tabule provozu</h2>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div class="rows">
+      <table>
+        <thead>
+          <tr><th>Volačka</th><th>Typ</th><th>Výška</th><th>Vzdál.</th></tr>
+        </thead>
+        <tbody id="board-rows"></tbody>
+      </table>
+      <div id="board-empty" class="empty" hidden></div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="panel">
+      <h2>ATC audio</h2>
+      <div class="body" id="audio-panel"></div>
+    </div>
+    <div class="panel">
+      <h2>Detail letadla</h2>
+      <div class="body" id="detail">
+        <div class="empty" style="padding:0">Klikni na letadlo na radaru nebo na řádek v tabuli.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+'use strict';
+
+/* ============================================================================
+   ATC Radio — jednosouborová webová verze.
+
+   Pravidlo projektu: co není opravdové, netváří se jako opravdové.
+   Když zdroj neodpoví, ukáže se PRÁZDNÝ radar a důvod. Nikdy dosazená letadla.
+
+   Dva režimy:
+     · PŘÍMÝ  — prohlížeč volá ADS-B API sám. Audio nejde (LiveATC nepouští
+                cizí weby), místo něj odkaz na jejich vlastní přehrávač.
+     · BACKEND — když běží lokální server z tohohle repa, jde přes něj všechno
+                 včetně živého ATC zvuku.
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- letiště */
+const AIRPORTS = [
+  { icao: 'LKPR', name: 'Praha / Ruzyně — Václav Havel', lat: 50.1008, lon: 14.2600 },
+  { icao: 'LKTB', name: 'Brno / Tuřany',                 lat: 49.1513, lon: 16.6944 },
+  { icao: 'LKMT', name: 'Ostrava / Mošnov',              lat: 49.6963, lon: 18.1111 },
+  { icao: 'EDDF', name: 'Frankfurt am Main',             lat: 50.0379, lon:  8.5622 },
+  { icao: 'EHAM', name: 'Amsterdam Schiphol',            lat: 52.3105, lon:  4.7683 },
+  { icao: 'EGLL', name: 'London Heathrow',               lat: 51.4700, lon: -0.4543 },
+  { icao: 'LOWW', name: 'Wien Schwechat',                lat: 48.1103, lon: 16.5697 },
+  { icao: 'KJFK', name: 'New York JFK',                  lat: 40.6413, lon: -73.7781 },
+];
+
+/* ------------------------------------------- metadata ze specifikace ADS-B */
+const CATEGORIES = {
+  A0: 'Nespecifikováno', A1: 'Lehké (do 7 t)', A2: 'Malé (7–34 t)',
+  A3: 'Velké (34–136 t)', A4: 'Velké s vysokou turbulencí (B757)',
+  A5: 'Těžké (nad 136 t)', A6: 'Vysoce výkonné', A7: 'Vrtulník',
+  B1: 'Kluzák', B2: 'Balon / vzducholoď', B3: 'Parašutista',
+  B4: 'Ultralight / paragliding', B6: 'Bezpilotní', B7: 'Kosmické',
+  C0: 'Pozemní, nespecifikováno', C1: 'Pozemní — záchranné vozidlo',
+  C2: 'Pozemní — obslužné vozidlo', C3: 'Pevná překážka',
+};
+const SPECIAL_SQUAWKS = {
+  7500: { label: 'ÚNOS', severity: 'critical' },
+  7600: { label: 'ZTRÁTA SPOJENÍ', severity: 'critical' },
+  7700: { label: 'NOUZE', severity: 'critical' },
+  7000: { label: 'VFR (Evropa)', severity: 'info' },
+  1200: { label: 'VFR (USA)', severity: 'info' },
+  2000: { label: 'Vstup do řízeného prostoru', severity: 'info' },
+};
+const describeCategory = (c) => (c ? CATEGORIES[String(c).toUpperCase()] || null : null);
+const describeSquawk = (s) => (s ? SPECIAL_SQUAWKS[String(s).padStart(4, '0')] || null : null);
+function wakeClass(category) {
+  const c = String(category || '').toUpperCase();
+  if (c === 'A5') return 'Heavy';
+  if (c === 'A4') return 'Heavy (B757)';
+  if (c === 'A3') return 'Medium';
+  if (c === 'A2') return 'Light/Medium';
+  if (c === 'A1') return 'Light';
+  return null; // odhadovat "Medium" u neznámého typu = vymýšlet si
+}
+
+/* ------------------------------------------------------------- normalizace */
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+
+function colorForAltitude(ft, onGround) {
+  if (onGround) return '#c07cd8';
+  if (ft < 2000) return '#ff6b6b';
+  if (ft < 10000) return '#ffd93d';
+  if (ft < 25000) return '#6bcf7f';
+  return '#4d96ff';
+}
+
+function normalize(raw) {
+  const onGround = !!raw.onGround;
+  const altitude = num(raw.alt) ?? 0;
+  const out = {
+    id: raw.id,
+    callsign: (raw.callsign || '').trim() || raw.id,
+    position: { lat: raw.lat, lng: raw.lon },
+    altitude,
+    velocity: num(raw.gs) ?? 0,
+    heading: num(raw.track) ?? 0,
+    verticalRate: num(raw.vs) ?? 0,
+    onGround,
+    squawk: raw.squawk || null,
+    // identita — null když ji zdroj nemá, nikdy dosazená
+    type: raw.type || null,
+    typeName: raw.desc || null,
+    registration: raw.reg || null,
+    operator: raw.operator || null,
+    year: raw.year || null,
+    category: raw.category || null,
+    source: raw.source,
+  };
+  out.categoryName = describeCategory(out.category);
+  out.wake = wakeClass(out.category);
+  out.squawkMeaning = describeSquawk(out.squawk);
+  out.color = colorForAltitude(altitude, onGround);
+  return out;
+}
+
+// readsb/tar1090 JSON — sdílí ho adsb.lol i airplanes.live
+function fromReadsb(list, source) {
+  return (list || [])
+    .filter((a) => a.lat != null && a.lon != null)
+    .map((a) => normalize({
+      id: a.hex, callsign: a.flight, lat: a.lat, lon: a.lon,
+      alt: a.alt_baro === 'ground' ? 0 : a.alt_baro,
+      gs: a.gs, track: a.track ?? a.true_heading,
+      vs: a.baro_rate ?? a.geom_rate,
+      onGround: a.alt_baro === 'ground',
+      squawk: a.squawk, type: a.t, desc: a.desc, reg: a.r,
+      operator: a.ownOp, year: a.year, category: a.category, source,
+    }));
+}
+
+/* ------------------------------------------------------------- geometrie */
+const EARTH_R_KM = 6371;
+const toRad = (d) => (d * Math.PI) / 180;
+
+function distanceKm(aLat, aLon, bLat, bLon) {
+  const dLat = toRad(bLat - aLat), dLon = toRad(bLon - aLon);
+  const s = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_R_KM * Math.asin(Math.sqrt(s));
+}
+function bearingDeg(aLat, aLon, bLat, bLon) {
+  const y = Math.sin(toRad(bLon - aLon)) * Math.cos(toRad(bLat));
+  const x = Math.cos(toRad(aLat)) * Math.sin(toRad(bLat)) -
+    Math.sin(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.cos(toRad(bLon - aLon));
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+const compass = (deg) => ['S','SV','V','JV','J','JZ','Z','SZ'][Math.round(deg / 45) % 8];
+
+const GROUND_RADIUS_KM = 6;
+const TERMINAL_RADIUS_KM = 45;
+const CLIMB_FPM = 300;
+
+function classify(ac, airport) {
+  const d = distanceKm(airport.lat, airport.lon, ac.position.lat, ac.position.lng);
+  const brg = bearingDeg(airport.lat, airport.lon, ac.position.lat, ac.position.lng);
+  const vs = ac.verticalRate || 0;
+
+  let phase = 'transit';
+  if (ac.onGround && d <= GROUND_RADIUS_KM) phase = 'ground';
+  else if (d <= TERMINAL_RADIUS_KM && vs < -CLIMB_FPM && ac.altitude < 12000) phase = 'arriving';
+  else if (d <= TERMINAL_RADIUS_KM && vs > CLIMB_FPM && ac.altitude < 18000) phase = 'departing';
+
+  return { ...ac, phase, distanceKm: Math.round(d * 10) / 10, bearing: Math.round(brg), compass: compass(brg) };
+}
+
+function buildBoard(aircraft, airport) {
+  const classified = (aircraft || []).map((ac) => classify(ac, airport));
+  const byDistance = (a, b) => a.distanceKm - b.distanceKm;
+  return {
+    arriving:  classified.filter((a) => a.phase === 'arriving').sort(byDistance),
+    departing: classified.filter((a) => a.phase === 'departing').sort(byDistance),
+    ground:    classified.filter((a) => a.phase === 'ground').sort(byDistance),
+    transit:   classified.filter((a) => a.phase === 'transit').sort(byDistance),
+    all: classified,
+  };
+}
+
+/* ------------------------------------------------------------ načítání dat */
+const RANGE_KM = 90;
+const NM_PER_KM = 0.539957;
+const POLL_MS = 8000;
+
+async function getJSON(url, timeoutMs = 9000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Rozlišení příčiny selhání. CORS se v prohlížeči projeví jako TypeError bez
+// detailu — pojmenovat to je pro uživatele podstatně užitečnější než "failed".
+function reason(err) {
+  if (err && err.name === 'AbortError') return 'vypršel časový limit';
+  if (err instanceof TypeError) return 'blokováno prohlížečem (CORS) nebo síť nedostupná';
+  return (err && err.message) || String(err);
+}
+
+const DIRECT_SOURCES = [
+  ['adsb.lol', async (lat, lon) => {
+    const nm = Math.min(250, Math.round(RANGE_KM * NM_PER_KM));
+    const d = await getJSON(`https://api.adsb.lol/v2/point/${lat}/${lon}/${nm}`);
+    return fromReadsb(d.ac, 'adsb.lol');
+  }],
+  ['airplanes.live', async (lat, lon) => {
+    const nm = Math.min(250, Math.round(RANGE_KM * NM_PER_KM));
+    const d = await getJSON(`https://api.airplanes.live/v2/point/${lat}/${lon}/${nm}`);
+    return fromReadsb(d.ac, 'airplanes.live');
+  }],
+  ['opensky', async (lat, lon) => {
+    const dLat = RANGE_KM / 111;
+    const dLon = RANGE_KM / (111 * Math.cos(toRad(lat)));
+    const d = await getJSON(
+      `https://opensky-network.org/api/states/all` +
+      `?lamin=${lat - dLat}&lamax=${lat + dLat}&lomin=${lon - dLon}&lomax=${lon + dLon}`
+    );
+    // OpenSky nese jen polohu — typ ani imatrikulaci nemá, ta pole zůstanou null
+    return (d.states || [])
+      .filter((s) => s[5] != null && s[6] != null)
+      .map((s) => normalize({
+        id: s[0], callsign: s[1], lat: s[6], lon: s[5],
+        alt: (s[13] ?? s[7] ?? 0) * 3.28084,
+        gs: (s[9] || 0) * 1.94384,
+        track: s[10],
+        vs: (s[11] || 0) * 196.85,
+        onGround: s[8], squawk: s[14], source: 'opensky',
+      }));
+  }],
+];
+
+async function fetchTrafficDirect(airport) {
+  const errors = [];
+  for (const [name, fn] of DIRECT_SOURCES) {
+    try {
+      const aircraft = await fn(airport.lat, airport.lon);
+      if (aircraft.length) return { live: true, source: name, aircraft, errors };
+      errors.push(`${name}: 0 letadel`);
+    } catch (err) {
+      errors.push(`${name}: ${reason(err)}`);
+    }
+  }
+  return { live: false, source: null, aircraft: [], errors };
+}
+
+async function fetchTrafficBackend(airport, backend) {
+  const d = await getJSON(`${backend}/api/traffic/${airport.icao}`);
+  return { live: !!d.live, source: d.source, aircraft: d.aircraft || [], errors: d.errors || [] };
+}
+
+/* ------------------------------------------------------------------ stav */
+const state = {
+  airport: AIRPORTS[0],
+  aircraft: [],
+  board: { arriving: [], departing: [], ground: [], transit: [], all: [] },
+  live: false,
+  source: null,
+  errors: [],
+  tab: 'arriving',
+  selectedId: null,
+  backend: localStorage.getItem('atc.backend') || '',
+  backendOk: false,
+  photoCache: new Map(),
+  timer: null,
+};
+
+const $ = (id) => document.getElementById(id);
+
+/* ------------------------------------------------------------ detekce módu */
+async function probeBackend() {
+  if (!state.backend) { state.backendOk = false; return; }
+  try {
+    await getJSON(`${state.backend}/api/airports`, 4000);
+    state.backendOk = true;
+  } catch {
+    state.backendOk = false;
+  }
+}
+
+/* ------------------------------------------------------------------ radar */
+const cv = $('scope');
+const ctx = cv.getContext('2d');
+
+function project(ac) {
+  // Rovinná projekce kolem letiště — pro 90 km je zkreslení zanedbatelné.
+  const a = state.airport;
+  const dNorthKm = (ac.position.lat - a.lat) * 111;
+  const dEastKm = (ac.position.lng - a.lon) * 111 * Math.cos(toRad(a.lat));
+  const pxPerKm = (cv.width / 2 - 30) / RANGE_KM;
+  return { x: cv.width / 2 + dEastKm * pxPerKm, y: cv.height / 2 - dNorthKm * pxPerKm };
+}
+
+function drawRadar() {
+  const w = cv.width, h = cv.height, cx = w / 2, cy = h / 2;
+  const R = cx - 30;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#080c11';
+  ctx.fillRect(0, 0, w, h);
+
+  // kruhy po 30 km
+  ctx.strokeStyle = '#1c2733';
+  ctx.fillStyle = '#3d4d60';
+  ctx.font = '13px ui-monospace, monospace';
+  ctx.lineWidth = 1;
+  for (let km = 30; km <= RANGE_KM; km += 30) {
+    const r = (km / RANGE_KM) * R;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillText(km + ' km', cx + 4, cy - r + 15);
+  }
+
+  // světové strany
+  ctx.beginPath();
+  ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
+  ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+  ctx.stroke();
+  ctx.fillStyle = '#54677e';
+  ctx.font = 'bold 15px ui-sans-serif, system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('S', cx, cy - R - 8);
+  ctx.fillText('J', cx, cy + R + 20);
+  ctx.fillText('Z', cx - R - 14, cy + 5);
+  ctx.fillText('V', cx + R + 14, cy + 5);
+  ctx.textAlign = 'left';
+
+  // letiště
+  ctx.fillStyle = '#e7edf5';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = 'bold 14px ui-monospace, monospace';
+  // vysoko nad střed — letadla stojící na letišti kreslí popisky těsně vedle
+  ctx.fillText(state.airport.icao, cx + 10, cy - 16);
+
+  // prázdný radar musí být poznat na první pohled
+  if (!state.aircraft.length) {
+    ctx.fillStyle = state.live ? '#54677e' : '#c98d8a';
+    ctx.font = '17px ui-sans-serif, system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(
+      state.live ? 'žádný provoz v dosahu' : 'žádná živá data — viz hlášku nad radarem',
+      cx, cy + R - 24
+    );
+    ctx.textAlign = 'left';
+    return;
+  }
+
+  for (const ac of state.board.all) {
+    const p = project(ac);
+    if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
+    const sel = ac.id === state.selectedId;
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(toRad(ac.heading || 0));
+    ctx.fillStyle = ac.color;
+    ctx.beginPath();          // trojúhelník špičkou po kurzu
+    ctx.moveTo(0, -9);
+    ctx.lineTo(6, 7);
+    ctx.lineTo(0, 4);
+    ctx.lineTo(-6, 7);
+    ctx.closePath();
+    ctx.fill();
+    if (sel) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    if (sel) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 17, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = sel ? '#ffffff' : '#9fb0c4';
+    ctx.font = (sel ? 'bold ' : '') + '12px ui-monospace, monospace';
+    ctx.fillText(ac.callsign, p.x + 12, p.y - 4);
+    ctx.fillStyle = sel ? '#cfe0f5' : '#63758c';
+    ctx.fillText(
+      ac.onGround ? 'GND' : Math.round(ac.altitude).toLocaleString('cs') + ' ft',
+      p.x + 12, p.y + 9
+    );
+  }
+}
+
+cv.addEventListener('click', (ev) => {
+  const rect = cv.getBoundingClientRect();
+  const x = (ev.clientX - rect.left) * (cv.width / rect.width);
+  const y = (ev.clientY - rect.top) * (cv.height / rect.height);
+
+  let best = null, bestD = 26; // klikací tolerance v px
+  for (const ac of state.board.all) {
+    const p = project(ac);
+    const d = Math.hypot(p.x - x, p.y - y);
+    if (d < bestD) { bestD = d; best = ac; }
+  }
+  select(best ? best.id : null);
+});
+
+/* ------------------------------------------------------------------ tabule */
+const TABS = [
+  ['arriving',  'Přílety 🛬'],
+  ['departing', 'Odlety 🛫'],
+  ['ground',    'Na zemi 🅿'],
+  ['transit',   'Přelety ✈'],
+];
+
+function renderTabs() {
+  $('tabs').innerHTML = TABS.map(([key, label]) =>
+    `<button class="tab" role="tab" data-tab="${key}" aria-selected="${state.tab === key}">` +
+    `${label} <span class="muted">${state.board[key].length}</span></button>`
+  ).join('');
+}
+
+function renderBoard() {
+  const list = state.board[state.tab] || [];
+  const tbody = $('board-rows');
+  const empty = $('board-empty');
+
+  if (!list.length) {
+    tbody.innerHTML = '';
+    empty.hidden = false;
+    empty.textContent = state.live
+      ? 'V téhle kategorii teď nic není.'
+      : 'Bez živých dat není co zobrazit.';
+    return;
+  }
+  empty.hidden = true;
+  tbody.innerHTML = list.map((ac) => `
+    <tr data-id="${ac.id}" aria-selected="${ac.id === state.selectedId}">
+      <td class="mono"><b>${esc(ac.callsign)}</b></td>
+      <td>${esc(ac.type || '—')}</td>
+      <td class="mono">${ac.onGround ? 'GND' : Math.round(ac.altitude).toLocaleString('cs') + ' ft'}</td>
+      <td class="mono">${ac.distanceKm} km ${ac.compass}</td>
+    </tr>`).join('');
+}
+
+/* ------------------------------------------------------------------ detail */
+function row(label, value) {
+  if (value === null || value === undefined || value === '') return '';
+  return `<dt>${label}</dt><dd>${esc(String(value))}</dd>`;
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function renderDetail() {
+  const host = $('detail');
+  const ac = state.board.all.find((a) => a.id === state.selectedId);
+
+  if (!ac) {
+    host.innerHTML = '<div class="empty" style="padding:0">Klikni na letadlo na radaru nebo na řádek v tabuli.</div>';
+    return;
+  }
+
+  const sq = ac.squawkMeaning;
+  const alarm = sq && sq.severity === 'critical'
+    ? `<div class="alarm">⚠ ${esc(sq.label)} — SQUAWK ${esc(ac.squawk)}</div>` : '';
+
+  host.innerHTML = `
+    <div id="photo-host"></div>
+    ${alarm}
+    <div class="callsign mono">${esc(ac.callsign)}</div>
+    <div class="sub">${esc(ac.typeName || ac.type || 'typ neznámý')}${ac.type && ac.typeName ? ' · ' + esc(ac.type) : ''}</div>
+    <dl>
+      ${row('Imatrikulace', ac.registration)}
+      ${row('Provozovatel', ac.operator)}
+      ${row('Rok výroby', ac.year)}
+      ${row('Kategorie', ac.categoryName)}
+      ${row('Třída turbulence', ac.wake)}
+      ${row('Výška', ac.onGround ? 'na zemi' : Math.round(ac.altitude).toLocaleString('cs') + ' ft')}
+      ${row('Rychlost', Math.round(ac.velocity) + ' kt')}
+      ${row('Kurz', Math.round(ac.heading) + '°')}
+      ${row('Stoupání', (ac.verticalRate > 0 ? '+' : '') + Math.round(ac.verticalRate) + ' ft/min')}
+      ${row('Squawk', ac.squawk)}
+      ${row('Vzdálenost', ac.distanceKm + ' km ' + ac.compass)}
+      ${row('Zdroj', ac.source)}
+    </dl>
+    ${ac.registration || ac.type ? '' : '<p class="muted" style="margin-top:10px">Tenhle zdroj neposílá typ ani imatrikulaci — pole zůstávají prázdná, nedoplňujeme je odhadem.</p>'}
+  `;
+
+  loadPhoto(ac);
+}
+
+// Fotka konkrétního trupu podle hex kódu. Když ji nemáme, nedáváme náhradní.
+async function loadPhoto(ac) {
+  const hex = String(ac.id || '').toLowerCase();
+  if (!/^[0-9a-f]{6}$/.test(hex)) return;
+
+  if (state.photoCache.has(hex)) {
+    showPhoto(state.photoCache.get(hex));
+    return;
+  }
+
+  try {
+    let photo = null;
+    if (state.backendOk) {
+      const d = await getJSON(`${state.backend}/api/photo/${hex}`);
+      photo = d.photo || null;
+    } else {
+      const d = await getJSON(`https://api.planespotters.net/pub/photos/hex/${hex}`);
+      const p = (d.photos || [])[0];
+      if (p) {
+        photo = {
+          large: (p.thumbnail_large && p.thumbnail_large.src) || (p.thumbnail && p.thumbnail.src),
+          link: p.link,
+          photographer: p.photographer,
+          credit: 'Planespotters.net',
+        };
+      }
+    }
+    state.photoCache.set(hex, photo);
+    if (state.selectedId === ac.id) showPhoto(photo);
+  } catch {
+    state.photoCache.set(hex, null); // fotka prostě není — nic nepředstíráme
+  }
+}
+
+// Kredit fotografa smí být na stránce jen tehdy, když je nad ním opravdu vidět
+// jeho fotka. Když se obrázek nenačte, zmizí i podpis — jinak bychom
+// uváděli autora k prázdnému místu.
+function showPhoto(p) {
+  const host = $('photo-host');
+  if (!host || !p || !p.large) return;
+
+  host.innerHTML = `<a href="${esc(p.link || '#')}" target="_blank" rel="noopener">
+      <img class="photo" alt="">
+    </a>
+    <div class="credit">© ${esc(p.photographer || 'neznámý autor')} · ${esc(p.credit || 'Planespotters.net')}</div>`;
+
+  const img = host.querySelector('img');
+  img.addEventListener('error', () => { host.innerHTML = ''; });
+  img.src = p.large;
+}
+
+/* ------------------------------------------------------------------- audio */
+function renderAudio() {
+  const host = $('audio-panel');
+  const icao = state.airport.icao;
+
+  if (state.backendOk) {
+    host.innerHTML = `<div class="muted">Backend běží — feedy se hledají…</div>`;
+    getJSON(`${state.backend}/api/feeds/${icao}`).then((d) => {
+      if (state.airport.icao !== icao) return;
+      if (!d.available || !d.positions.length) {
+        host.innerHTML = `<div class="muted">LiveATC pro ${esc(icao)} žádný feed nemá. To je legitimní odpověď — ne každé letiště je pokryté.</div>`;
+        return;
+      }
+      host.innerHTML = d.positions.map((p) => `
+        <div style="margin-bottom:10px">
+          <div style="font-weight:600;margin-bottom:4px">${esc(p.label || p.key)}</div>
+          <audio controls preload="none" src="${esc(state.backend)}/api/stream/${esc(p.feeds[0].id)}"></audio>
+        </div>`).join('');
+    }).catch((e) => {
+      host.innerHTML = `<div class="muted">Feedy se nepodařilo načíst: ${esc(reason(e))}</div>`;
+    });
+    return;
+  }
+
+  host.innerHTML = `
+    <p class="muted" style="margin-top:0">
+      Živý zvuk se v téhle verzi nedá přehrát přímo ve stránce: LiveATC nepouští
+      přehrávání z cizích webů (CORS + ochrana proti hotlinkování). Nechci tady
+      mít tlačítko, které nic nepřehraje — tak vede rovnou k nim.
+    </p>
+    <a class="btn" href="https://www.liveatc.net/search/?icao=${encodeURIComponent(icao)}"
+       target="_blank" rel="noopener">▶ Poslouchat ${esc(icao)} na LiveATC.net</a>
+    <p class="muted" style="margin-bottom:0">
+      Zvuk přímo tady umí desktopová appka nebo lokální server z tohohle repa —
+      ten si stream stáhne sám a pošle ho do stránky. Nastavíš ho tlačítkem
+      <b>backend</b> nahoře.
+    </p>`;
+}
+
+/* ------------------------------------------------------------------ hlášky */
+function renderNotice() {
+  const host = $('notice-host');
+  const parts = [];
+
+  if (!state.live) {
+    parts.push(`
+      <div class="notice bad">
+        <b>Žádná živá data — radar je proto prázdný.</b>
+        Ani jeden zdroj neodpověděl:
+        <ul>${state.errors.map((e) => `<li><code>${esc(e)}</code></li>`).join('')}</ul>
+        ${state.backendOk ? '' : `<p style="margin:8px 0 0">
+          Nejčastější příčina je CORS — veřejná ADS-B API nemusí pouštět volání
+          přímo z prohlížeče. Spolehlivá cesta je pustit lokální server
+          (<code>npm run dev:server</code>) a zadat ho tlačítkem <b>backend</b>;
+          ten data stáhne serverem, kde žádné CORS neplatí.</p>`}
+      </div>`);
+  }
+
+  host.innerHTML = parts.join('');
+}
+
+function renderPills() {
+  const mode = $('pill-mode');
+  if (state.backendOk) {
+    mode.className = 'pill ok';
+    mode.textContent = 'režim: backend (audio ✓)';
+  } else {
+    mode.className = 'pill warn';
+    mode.textContent = 'režim: přímý (bez audia)';
+  }
+
+  const t = $('pill-traffic');
+  if (state.live) {
+    t.className = 'pill ok';
+    t.textContent = `provoz ● ${state.source} · ${state.aircraft.length}`;
+  } else {
+    t.className = 'pill bad';
+    t.textContent = 'provoz ○ bez dat';
+  }
+}
+
+/* ------------------------------------------------------------------ render */
+function renderAll() {
+  renderPills();
+  renderNotice();
+  renderTabs();
+  renderBoard();
+  renderDetail();
+  drawRadar();
+}
+
+function select(id) {
+  state.selectedId = id;
+  renderBoard();
+  renderDetail();
+  drawRadar();
+}
+
+/* -------------------------------------------------------------------- data */
+async function refresh() {
+  const airport = state.airport;
+  let result;
+  try {
+    result = state.backendOk
+      ? await fetchTrafficBackend(airport, state.backend)
+      : await fetchTrafficDirect(airport);
+  } catch (err) {
+    result = { live: false, source: null, aircraft: [], errors: ['backend: ' + reason(err)] };
+    state.backendOk = false;
+  }
+  if (state.airport !== airport) return; // uživatel mezitím přepnul letiště
+
+  state.live = result.live;
+  state.source = result.source;
+  state.errors = result.errors || [];
+  state.aircraft = result.aircraft;
+  state.board = buildBoard(result.aircraft, airport);
+
+  if (state.selectedId && !state.board.all.some((a) => a.id === state.selectedId)) {
+    state.selectedId = null; // letadlo odletělo z dosahu
+  }
+  renderAll();
+}
+
+function startPolling() {
+  if (state.timer) clearInterval(state.timer);
+  state.timer = setInterval(refresh, POLL_MS);
+}
+
+/* ------------------------------------------------------------------ události */
+$('airport').innerHTML = AIRPORTS
+  .map((a) => `<option value="${a.icao}">${a.icao} — ${esc(a.name)}</option>`).join('');
+
+$('airport').addEventListener('change', (e) => {
+  state.airport = AIRPORTS.find((a) => a.icao === e.target.value) || AIRPORTS[0];
+  state.selectedId = null;
+  state.aircraft = [];
+  state.board = buildBoard([], state.airport);
+  renderAll();
+  renderAudio();
+  refresh();
+});
+
+$('tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-tab]');
+  if (!btn) return;
+  state.tab = btn.dataset.tab;
+  renderTabs();
+  renderBoard();
+});
+
+$('board-rows').addEventListener('click', (e) => {
+  const tr = e.target.closest('tr[data-id]');
+  if (tr) select(tr.dataset.id);
+});
+
+$('btn-backend').addEventListener('click', async () => {
+  const val = prompt(
+    'Adresa lokálního backendu (prázdné = přímý režim).\n' +
+    'Když běží server z tohohle repa, je to obvykle:',
+    state.backend || 'http://localhost:3001'
+  );
+  if (val === null) return;
+  state.backend = val.trim().replace(/\/+$/, '');
+  localStorage.setItem('atc.backend', state.backend);
+  await probeBackend();
+  if (state.backend && !state.backendOk) {
+    alert('Na té adrese se nikdo neozval. Zůstávám v přímém režimu.');
+  }
+  renderAll();
+  renderAudio();
+  refresh();
+});
+
+/* -------------------------------------------------------------------- start */
+(async function init() {
+  // ?backend=http://localhost:3001 přebije uložené nastavení
+  const q = new URLSearchParams(location.search).get('backend');
+  if (q !== null) {
+    state.backend = q.trim().replace(/\/+$/, '');
+    localStorage.setItem('atc.backend', state.backend);
+  }
+  $('range-label').textContent = RANGE_KM;
+  $('airport').value = state.airport.icao;
+
+  await probeBackend();
+  renderAll();
+  renderAudio();
+  await refresh();
+  startPolling();
+})();
+</script>
+</body>
+</html>

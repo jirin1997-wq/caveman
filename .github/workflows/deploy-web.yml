@@ -1,0 +1,63 @@
+name: Deploy web app
+
+# Publishes web/index.html to GitHub Pages.
+#
+# What goes public is only the client: the page ships no audio and no aircraft
+# data of its own. Traffic is fetched by the visitor's own browser straight
+# from the public ADS-B APIs, and ATC audio is a plain link to LiveATC's own
+# player — nothing is re-served from here, so this does not put the project in
+# the redistribution position that LiveATC's terms forbid.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'claude/atc-radio-app-**'
+    paths:
+      - 'web/**'
+      - '.github/workflows/deploy-web.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; queue instead, and let a newer one finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Guards the browser copy of the logic against drifting from the server's.
+      - run: node --test tests/web-parity.test.js
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+        with:
+          # Turns Pages on for the repository the first time this runs, so the
+          # site does not need to be enabled by hand in Settings first.
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

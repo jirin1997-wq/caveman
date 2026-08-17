@@ -17,6 +17,19 @@ const radio = new RadioSystem();
 
 app.use(express.json());
 
+// The standalone web build (web/index.html) is opened from a different origin
+// than this server — a file:// page, GitHub Pages, or any static host. Without
+// these headers the browser blocks it from reading any response. Everything
+// served here is public read-only data plus a personal audio proxy, and the
+// server is meant to be bound to localhost, so a wildcard origin is the right
+// scope.
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // --- REST ---------------------------------------------------------------
 
 app.get('/api/airports', (_req, res) => res.json(listAirports()));
