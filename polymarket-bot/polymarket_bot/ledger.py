@@ -1,4 +1,4 @@
-"""JSON ledger for paper and live trading: cash, open positions, trade log."""
+"""JSON ledger for paper and live trading: cash, open positions, trade log, risk state."""
 
 from __future__ import annotations
 
@@ -14,6 +14,11 @@ class Ledger:
             state = json.loads(self.path.read_text(encoding="utf-8"))
         else:
             state = {"cash": starting_cash, "starting_cash": starting_cash, "positions": {}, "trades": []}
+        # Older ledgers predate these keys; fill them in so restarts stay consistent.
+        state.setdefault("starting_cash", starting_cash)
+        state.setdefault("positions", {})
+        state.setdefault("trades", [])
+        state.setdefault("risk_state", {})
         self.state = state
 
     # ---- accounting -------------------------------------------------------
@@ -23,14 +28,32 @@ class Ledger:
         return self.state["cash"]
 
     @property
+    def starting_cash(self) -> float:
+        return self.state["starting_cash"]
+
+    @property
     def positions(self) -> dict:
         return self.state["positions"]
+
+    @property
+    def risk_state(self) -> dict:
+        """Mutable dict handed to RiskManager so its daily state survives restarts."""
+        return self.state["risk_state"]
 
     def open_exposure(self) -> float:
         return sum(pos["stake"] for pos in self.positions.values())
 
     def has_position(self, market_id: str) -> bool:
         return market_id in self.positions
+
+    def sizing_base(self) -> float:
+        """The single bankroll figure used for both sizing and risk caps.
+
+        Cash plus open positions valued at entry cost. Sizing and the risk caps must
+        agree on this number — mixing cash here and equity there makes the caps
+        reject stakes the sizer just produced.
+        """
+        return self.state["cash"] + self.open_exposure()
 
     def open_position(
         self,
@@ -42,8 +65,11 @@ class Ledger:
         cost: float,
         p_model: float,
         now_ts: float,
+        shares: Optional[float] = None,
     ) -> None:
-        shares = stake / cost
+        """Record a fill. `shares` overrides stake/cost when the venue reports actual size."""
+        if shares is None:
+            shares = stake / cost
         self.state["cash"] -= stake
         self.positions[market_id] = {
             "question": question,
@@ -56,7 +82,8 @@ class Ledger:
             "opened_ts": now_ts,
         }
         self.state["trades"].append(
-            {"ts": now_ts, "type": "open", "market_id": market_id, "side": side, "stake": stake, "cost": cost, "p_model": p_model}
+            {"ts": now_ts, "type": "open", "market_id": market_id, "side": side,
+             "stake": stake, "shares": shares, "cost": cost, "p_model": p_model}
         )
 
     def settle(self, market_id: str, winner_index: Optional[int], now_ts: float) -> float:
@@ -81,6 +108,9 @@ class Ledger:
             mark = marks.get(market_id, pos["cost"])
             value += pos["shares"] * mark
         return value
+
+    def realized_pnl(self) -> float:
+        return sum(t.get("pnl", 0.0) for t in self.state["trades"] if t["type"] == "settle")
 
     # ---- persistence ------------------------------------------------------
 

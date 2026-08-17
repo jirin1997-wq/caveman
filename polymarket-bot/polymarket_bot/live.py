@@ -6,10 +6,19 @@ Refuses to start unless ALL of the following hold:
   3. POLYBOT_LIVE=I_UNDERSTAND_REAL_MONEY (exact sentinel, in the environment)
   4. --yes-really flag passed on the command line
 
-Same decision core and risk manager as paper trading; the only difference is that
-fills go to the Polymarket CLOB as GTC limit orders at the midpoint plus a small
-slippage allowance. Order placement uses py-clob-client — verify its current API
-against https://docs.polymarket.com before first run; the client evolves.
+Same engine, decision core and risk manager as paper trading. Orders are submitted
+fill-and-kill (FAK) rather than resting limits: a resting order can sit unfilled for
+hours while the ledger believes it holds a position, and a ledger that disagrees with
+reality makes every downstream risk limit meaningless. FAK either fills now or is
+cancelled, so what gets recorded is what actually happened.
+
+If a fill cannot be confirmed from the venue's response, the bot stops instead of
+guessing — reconcile by hand, then restart.
+
+Wallet note: accounts created through the Polymarket web UI trade via a proxy wallet.
+Set POLYBOT_SIGNATURE_TYPE=1 (email/magic login) or 2 (browser wallet) and
+POLYBOT_FUNDER=<proxy address> for those. A plain EOA holding USDC needs neither.
+Verify against https://docs.polymarket.com before the first run.
 
 Usage:
   POLYBOT_LIVE=I_UNDERSTAND_REAL_MONEY python -m polymarket_bot.live --yes-really --bankroll 100
@@ -18,38 +27,143 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
+from typing import Optional, Tuple
 
 from . import clob, gamma
-from .config import LIVE_SENTINEL, get_settings
-from .features import compute_features, to_vector
+from .config import CLOB_HOST, LIVE_SENTINEL, get_settings
+from .engine import find_signals, load_model, settle_positions
 from .ledger import Ledger
-from .paper import load_model
 from .risk import RiskManager
-from .strategy import decide
 
-CLOB_HOST = "https://clob.polymarket.com"
 POLYGON_CHAIN_ID = 137
-SLIPPAGE = 0.01  # limit price allowance above midpoint
-MIN_ORDER_USD = 1.0
+SLIPPAGE = 0.01      # how far above the midpoint we are willing to pay
+MIN_ORDER_USD = 1.0  # venue minimum notional
+MIN_ORDER_SHARES = 5.0  # venue minimum size
+
+
+class ReconcileRequired(Exception):
+    """Raised when the ledger can no longer be trusted to match the venue."""
 
 
 def build_client(private_key: str):
     from py_clob_client.client import ClobClient  # import gated: optional dependency
 
-    client = ClobClient(CLOB_HOST, key=private_key, chain_id=POLYGON_CHAIN_ID)
+    signature_type = os.environ.get("POLYBOT_SIGNATURE_TYPE")
+    funder = os.environ.get("POLYBOT_FUNDER")
+    kwargs = {"key": private_key, "chain_id": POLYGON_CHAIN_ID}
+    if signature_type:
+        kwargs["signature_type"] = int(signature_type)
+    if funder:
+        kwargs["funder"] = funder
+
+    client = ClobClient(CLOB_HOST, **kwargs)
     client.set_api_creds(client.create_or_derive_api_creds())
     return client
 
 
-def place_order(client, token_id: str, price: float, usd: float):
+def _float_or_none(value) -> Optional[float]:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def interpret_fill(resp, requested_shares: float, price: float) -> Tuple[float, float]:
+    """(filled_shares, spent_usd) from a FAK order response.
+
+    Returns (0, 0) for a clean no-fill. Raises ReconcileRequired when the response
+    cannot be read confidently — with real money on the line, an unreadable response
+    must stop the bot rather than become an assumed fill.
+    """
+    if not isinstance(resp, dict):
+        raise ReconcileRequired(f"unrecognized order response: {resp!r}")
+    if resp.get("errorMsg"):
+        return 0.0, 0.0  # venue rejected the order outright — nothing was bought
+    if resp.get("success") is False:
+        return 0.0, 0.0
+
+    status = str(resp.get("status", "")).lower()
+    if status in ("unmatched", "cancelled", "canceled"):
+        return 0.0, 0.0
+
+    # A BUY takes outcome shares and makes USDC: takingAmount = shares, makingAmount = USD.
+    shares = _float_or_none(resp.get("takingAmount"))
+    spent = _float_or_none(resp.get("makingAmount"))
+    if shares is not None:
+        return shares, spent if spent is not None else shares * price
+    if status == "matched":
+        # Matched but sizes absent: assume the full requested size rather than lose
+        # the position, and say so loudly in the log.
+        print("  warning: fill confirmed without sizes — assuming full requested size", file=sys.stderr)
+        return requested_shares, requested_shares * price
+
+    raise ReconcileRequired(f"cannot determine fill from response: {resp!r}")
+
+
+def place_order(client, token_id: str, price: float, shares: float):
+    """Submit a fill-and-kill buy. Fills now at `price` or better, or is cancelled."""
     from py_clob_client.clob_types import OrderArgs, OrderType
     from py_clob_client.order_builder.constants import BUY
 
-    size = round(usd / price, 2)  # shares
-    order = client.create_order(OrderArgs(price=round(price, 3), size=size, side=BUY, token_id=token_id))
-    return client.post_order(order, OrderType.GTC)
+    order = client.create_order(
+        OrderArgs(price=price, size=round(shares, 2), side=BUY, token_id=token_id)
+    )
+    return client.post_order(order, OrderType.FAK)
+
+
+def run_scan(client, model, ledger: Ledger, risk: RiskManager, cfg, top: int) -> None:
+    now_ts = gamma.now_ts()
+    settle_positions(ledger, risk, now_ts)
+
+    if risk.kill_switch_active(now_ts):
+        print(f"kill-switch active for today (day PnL {risk.day_pnl:+.2f}) — no new trades")
+        ledger.save()
+        return
+
+    for signal in find_signals(model, ledger, risk, cfg, top):
+        market, decision = signal.market, signal.decision
+        token_id = market["token_ids"][decision.side]
+
+        tick = clob.tick_size(token_id)
+        limit_price = clob.round_to_tick(min(decision.raw_price + SLIPPAGE, 1.0 - tick), tick)
+        shares = decision.stake / limit_price
+        if decision.stake < MIN_ORDER_USD or shares < MIN_ORDER_SHARES:
+            print(f"skipped (below venue minimum): {market['question'][:60]}")
+            continue
+
+        try:
+            resp = place_order(client, token_id, limit_price, shares)
+        except Exception as exc:
+            print(f"order FAILED for {market['question'][:60]}: {exc}", file=sys.stderr)
+            continue
+
+        filled_shares, spent = interpret_fill(resp, shares, limit_price)
+        if filled_shares <= 0:
+            print(f"no fill: {market['question'][:60]}")
+            continue
+
+        # Record what actually filled, not what was requested.
+        ledger.open_position(
+            market["id"], market["question"], decision.side, token_id,
+            stake=spent, cost=spent / filled_shares, p_model=decision.p_win,
+            now_ts=gamma.now_ts(), shares=filled_shares,
+        )
+        ledger.save()  # persist before the next order — a crash must not lose a real fill
+        print(
+            f"LIVE BUY {market['outcomes'][decision.side]} {filled_shares:.2f} shares "
+            f"@ {spent / filled_shares:.3f} (${spent:.2f}) — {market['question'][:60]}"
+        )
+        time.sleep(0.5)
+
+    ledger.save()
+    print(
+        f"equity ${ledger.equity():,.2f} | cash ${ledger.cash:,.2f} | "
+        f"open {len(ledger.positions)} | realized PnL {ledger.realized_pnl():+,.2f}"
+    )
 
 
 def main() -> int:
@@ -64,7 +178,7 @@ def main() -> int:
 
     cfg = get_settings()
 
-    # --- safety gate: every condition must pass, in order, with a clear message ---
+    # --- safety gate: every condition must pass, with a clear message on failure ---
     if not args.yes_really:
         print("refusing: pass --yes-really to confirm live trading with real money", file=sys.stderr)
         return 2
@@ -74,6 +188,9 @@ def main() -> int:
     if not cfg.private_key:
         print("refusing: POLYBOT_PRIVATE_KEY is not set (see .env.example)", file=sys.stderr)
         return 2
+    if args.bankroll <= 0:
+        print("refusing: --bankroll must be positive", file=sys.stderr)
+        return 2
     try:
         client = build_client(cfg.private_key)
     except ImportError:
@@ -82,76 +199,21 @@ def main() -> int:
 
     model = load_model(args.model_dir)
     ledger = Ledger(args.ledger, starting_cash=args.bankroll)
-    risk = RiskManager(cfg, bankroll=args.bankroll)
+    risk = RiskManager(cfg, bankroll=ledger.starting_cash, state=ledger.risk_state)
 
-    print(f"LIVE trading armed: bankroll ${args.bankroll:,.2f}. Ctrl+C to stop.")
+    print(f"LIVE trading armed: bankroll ${ledger.starting_cash:,.2f}. Ctrl+C to stop.")
     while True:
         try:
             run_scan(client, model, ledger, risk, cfg, args.top)
+        except ReconcileRequired as exc:
+            ledger.save()
+            print(f"\nSTOPPING — ledger may not match the venue: {exc}", file=sys.stderr)
+            print("Check your positions at https://polymarket.com/portfolio, fix "
+                  f"{args.ledger} by hand, then restart.", file=sys.stderr)
+            return 1
         except Exception as exc:
             print(f"scan failed: {exc}", file=sys.stderr)
         time.sleep(args.interval)
-
-
-def run_scan(client, model, ledger: Ledger, risk: RiskManager, cfg, top: int) -> None:
-    now_ts = gamma.now_ts()
-
-    # settle resolved positions (winnings are redeemed on-chain by Polymarket automatically;
-    # the ledger mirrors that so risk limits track reality)
-    for market_id in list(ledger.positions.keys()):
-        market = gamma.get_market(market_id)
-        if market and market["closed"]:
-            pnl = ledger.settle(market_id, market["winner_index"], now_ts)
-            risk.record_pnl(pnl, now_ts)
-            print(f"settled {market_id}: PnL {pnl:+.2f}")
-
-    if risk.kill_switch_active(now_ts):
-        print("kill-switch active for today — no new trades")
-        ledger.save()
-        return
-
-    for market in gamma.iter_markets(closed=False, min_volume=cfg.min_volume, max_markets=top):
-        if ledger.has_position(market["id"]) or market["end_ts"] <= now_ts:
-            continue
-        yes_token = market["token_ids"][0]
-        mid = clob.midpoint(yes_token)
-        if mid is None:
-            continue
-        points = clob.price_history(yes_token, interval="1m", fidelity_minutes=60)
-        feats = compute_features(points + [(now_ts, mid)], now_ts, market["end_ts"], market["volume"])
-        if feats is None:
-            continue
-
-        p_model = float(model.predict_proba([to_vector(feats)])[0][1])
-        decision = decide(p_model, mid, ledger.equity(), cfg)
-        if decision is None or decision.stake < MIN_ORDER_USD:
-            continue
-
-        ok, reason = risk.check_trade(decision.stake, market["volume"], ledger.open_exposure(), ledger.cash, now_ts)
-        if not ok:
-            print(f"blocked ({reason}): {market['question'][:60]}")
-            continue
-
-        token_id = market["token_ids"][decision.side]
-        limit_price = min(decision.raw_price + SLIPPAGE, 0.99)
-        try:
-            resp = place_order(client, token_id, limit_price, decision.stake)
-        except Exception as exc:
-            print(f"order FAILED for {market['question'][:60]}: {exc}", file=sys.stderr)
-            continue
-
-        ledger.open_position(
-            market["id"], market["question"], decision.side, token_id,
-            decision.stake, decision.cost, decision.p_win, now_ts,
-        )
-        print(
-            f"LIVE BUY {market['outcomes'][decision.side]} limit {limit_price:.3f} "
-            f"(stake ${decision.stake:.2f}) — {market['question'][:60]} | resp: {resp}"
-        )
-        time.sleep(0.5)
-
-    ledger.save()
-    print(f"equity ${ledger.equity():,.2f} | cash ${ledger.cash:,.2f} | open positions {len(ledger.positions)}")
 
 
 if __name__ == "__main__":

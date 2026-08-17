@@ -56,3 +56,27 @@ def midpoint(token_id: str) -> Optional[float]:
         return float(data["mid"])
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def tick_size(token_id: str) -> float:
+    """Minimum price increment for a token (0.01 or 0.001). Falls back to 0.01.
+
+    Orders priced off the tick grid are rejected by the venue, so live orders must
+    round to this before submission.
+    """
+    data = _get("/tick-size", {"token_id": token_id})
+    try:
+        return float(data["minimum_tick_size"])
+    except (KeyError, TypeError, ValueError):
+        return 0.01
+
+
+def round_to_tick(price: float, tick: float) -> float:
+    """Round a price down to the tick grid, kept strictly inside (0, 1)."""
+    if tick <= 0:
+        tick = 0.01
+    steps = int(price / tick)
+    rounded = steps * tick
+    rounded = min(max(rounded, tick), 1.0 - tick)
+    # Ticks are decimal (0.01 / 0.001); binary float drift would fail venue validation.
+    return round(rounded, 4)

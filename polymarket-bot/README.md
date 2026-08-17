@@ -104,23 +104,44 @@ Risk manager navíc vynucuje: strop na pozici, strop na celkovou expozici, denn�
 
 | Soubor | Co dělá |
 |---|---|
-| `polymarket_bot/gamma.py` | Klient Gamma API (metadata trhů) |
-| `polymarket_bot/clob.py` | Klient CLOB API (cenové historie, midpoint) |
-| `polymarket_bot/collect.py` | Stažení rozhodnutých trhů + historií do `data/` |
+| `polymarket_bot/gamma.py` | Klient Gamma API (metadata trhů, stav rozhodnutí) |
+| `polymarket_bot/clob.py` | Klient CLOB API (cenové historie, midpoint, tick size) |
+| `polymarket_bot/collect.py` | Stažení rozhodnutých trhů + historií do `data/` (obnovitelné) |
 | `polymarket_bot/dataset.py` | Výroba trénovacích vzorků ze snímků před koncem trhu |
 | `polymarket_bot/features.py` | Výpočet featur (cena, čas do konce, momentum, volatilita…) |
-| `polymarket_bot/train.py` | Trénink + kalibrace, časový split, Brier report |
-| `polymarket_bot/backtest.py` | Walk-forward backtest s poplatky, skluzem a Kellym |
+| `polymarket_bot/train.py` | Trénink + kalibrace, dvojitý časový split, Brier report |
+| `polymarket_bot/backtest.py` | Walk-forward backtest s poplatky, skluzem, Kellym a risk limity |
+| `polymarket_bot/strategy.py` | Rozhodovací jádro (edge vs. poplatky, výběr strany) |
 | `polymarket_bot/sizing.py` | Kellyho kritérium (zlomkové, se stropem) |
-| `polymarket_bot/risk.py` | Limity pozic, expozice, denní kill-switch |
+| `polymarket_bot/risk.py` | Limity pozic, expozice, denní kill-switch (přežije restart) |
+| `polymarket_bot/engine.py` | Společné jádro pro paper i live (settlement, signály) |
 | `polymarket_bot/paper.py` | Paper trading smyčka nad živými cenami |
 | `polymarket_bot/live.py` | Reálné objednávky přes py-clob-client (zamčené) |
-| `polymarket_bot/ledger.py` | Účetní kniha pozic a obchodů (JSON) |
+| `polymarket_bot/ledger.py` | Účetní kniha pozic, obchodů a risk stavu (JSON) |
 | `polymarket_bot/synth.py` | Syntetická data pro offline test pipeline |
+
+## Pojistky proti tichým chybám
+
+Věci, které bot dělá schválně, protože bez nich se účetnictví rozejde s realitou:
+
+- **Paper i live jedou stejným kódem** (`engine.py`). Kdyby se lišily, výsledky
+  z paper tradingu by o live režimu nic nevypovídaly.
+- **Backtest prochází stejnými risk limity** jako živý bot. Bez toho by ukazoval
+  obchody, které by bot nikdy neudělal, a nadhodnocoval výsledek.
+- **Zrušené (voided) trhy se vypořádají a vrátí vklad.** Rozlišuje se „trh skončil
+  bez výsledku" od „nepovedlo se stáhnout data" — jinak by zrušené trhy držely
+  pozici navěky a ukrajovaly limit expozice.
+- **Kill-switch přežije restart** (ukládá se do ledgeru). Restart procesu nesmí být
+  cesta, jak obejít denní stop-loss.
+- **Live objednávky jsou fill-and-kill**, ne visící limitky, a zapisuje se jen to,
+  co se skutečně vyplnilo. Když nejde fill spolehlivě přečíst, bot se **zastaví**
+  a vyzve k ruční kontrole místo hádání.
+- **Sizing a limity počítají ze stejného základu** (hotovost + otevřené pozice).
 
 ## Testy
 
 ```bash
 pip install pytest
-pytest tests/
+pytest tests/                    # vše (64 testů, včetně end-to-end pipeline)
+pytest tests/ -m "not slow"      # jen rychlé unit testy
 ```

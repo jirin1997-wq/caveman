@@ -7,3 +7,4 @@ data-synth/
 models/
 models-synth/
 ledger.*.json
+.pytest_cache/

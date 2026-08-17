@@ -35,8 +35,13 @@ def test_decide_buys_no_on_overpriced_yes():
 
 
 def test_decide_fee_kills_marginal_edge():
-    # 6% raw edge at a high price: fee of 5% of cost pushes it under the 5% threshold
+    # 6% raw edge at a high price: a 5% fee on cost pushes it under the 5% threshold
     assert decide(p_model_yes=0.96, yes_price=0.90, bankroll=1000, cfg=cfg(fee_bps=500)) is None
+
+
+def test_decide_rejects_degenerate_prices():
+    assert decide(p_model_yes=0.9, yes_price=0.0, bankroll=1000, cfg=cfg()) is None
+    assert decide(p_model_yes=0.9, yes_price=1.0, bankroll=1000, cfg=cfg()) is None
 
 
 def test_risk_blocks_low_volume():
@@ -51,6 +56,23 @@ def test_risk_exposure_cap():
     assert not ok and "exposure" in reason
 
 
+def test_risk_blocks_when_cash_short_even_if_equity_allows():
+    """Equity can clear the caps while cash cannot fund the stake."""
+    r = RiskManager(cfg(), bankroll=1000)
+    ok, reason = r.check_trade(
+        stake=45, market_volume=50_000, open_exposure=400, bankroll=1000, now_ts=0, cash=10
+    )
+    assert not ok and "cash" in reason
+
+
+def test_risk_allows_normal_trade():
+    r = RiskManager(cfg(), bankroll=1000)
+    ok, reason = r.check_trade(
+        stake=40, market_volume=50_000, open_exposure=100, bankroll=1000, now_ts=0, cash=900
+    )
+    assert ok and reason == "ok"
+
+
 def test_kill_switch_trips_and_resets_next_day():
     r = RiskManager(cfg(), bankroll=1000)
     r.record_pnl(-60, now_ts=1000)  # > 5% of 1000
@@ -58,3 +80,15 @@ def test_kill_switch_trips_and_resets_next_day():
     ok, reason = r.check_trade(stake=10, market_volume=50_000, open_exposure=0, bankroll=940, now_ts=2000)
     assert not ok and "kill-switch" in reason
     assert not r.kill_switch_active(1000 + 86400)  # next UTC day resets
+
+
+def test_kill_switch_survives_restart_via_shared_state():
+    """A tripped kill-switch must not be cleared by restarting the process."""
+    state = {}
+    r1 = RiskManager(cfg(), bankroll=1000, state=state)
+    r1.record_pnl(-60, now_ts=1000)
+    assert r1.kill_switch_active(1000)
+
+    r2 = RiskManager(cfg(), bankroll=1000, state=state)  # "restart" with persisted state
+    assert r2.kill_switch_active(1000)
+    assert r2.day_pnl == -60

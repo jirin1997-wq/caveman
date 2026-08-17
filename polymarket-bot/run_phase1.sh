@@ -38,6 +38,14 @@ echo "==> Instaluji závislosti (chvíli to potrvá při prvním běhu)..."
 pip install --quiet --upgrade pip
 pip install --quiet -r requirements.txt
 
+# Rychlé testy dřív, než utratíme 40 minut na stahování dat.
+echo "==> Kontroluji, že kód funguje (rychlé testy)..."
+pip install --quiet pytest
+if ! python -m pytest tests/ -q -m "not slow" 2>&1 | tail -3; then
+  echo "CHYBA: testy neprošly — nepokračuji ke stahování dat." >&2
+  exit 1
+fi
+
 # --- data ---------------------------------------------------------------------
 if [ "$MODE" = "synth" ]; then
   DATA_DIR="data-synth"
