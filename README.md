@@ -40,6 +40,11 @@ Co v aplikaci **není**: žádný generátor „realistických" ATC hlášek, ž
 `web/index.html` je celá aplikace v jednom souboru — radar, tabule i detaily
 letadel. Otevřeš ji v prohlížeči a jede. Žádný Node, žádný build.
 
+Chceš ji mít i na vlastní adrese (pro mobil, pro čtení z práce)? Jednou zapni
+**Settings → Pages → Source: GitHub Actions**, pak se každý push sám vystaví
+přes `.github/workflows/deploy-web.yml`. To zapnutí musí udělat člověk —
+token, kterým běží workflow, Pages založit nesmí.
+
 Běží ve dvou režimech a sama pozná, ve kterém je:
 
 | | **přímý** (samotná stránka) | **backend** (+ lokální server) |
