@@ -11,6 +11,11 @@ import { saveBatch } from './store.js';
  *   category_main_cb=1  byty
  *   category_type_cb=1  prodej
  *   locality_region_id  kraj
+ *
+ * Pozn.: netestováno proti živému serveru — vývojové prostředí nepustí
+ * odchozí spojení na sreality.cz. Jde ale o veřejné API, které pohání
+ * jejich vlastní web, takže tvar odpovědi je pravděpodobně správný.
+ * Ze všech čtyř zdrojů má tenhle nejvyšší šanci projít na první pokus.
  */
 
 const API = 'https://www.sreality.cz/api/cs/v2/estates';

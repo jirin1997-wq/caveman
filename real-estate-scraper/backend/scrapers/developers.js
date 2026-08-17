@@ -4,10 +4,19 @@ import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
 
 /**
- * Agregátor webů velkých vývojářů (developerů) v ČR.
- * Každý developer má jiný web s jiným formátem — HTML parsing.
+ * Agregátor webů velkých developerů v ČR (Trigema, Central Group, Ekospol).
  *
- * MVP: Trigema, Central Group, Ekospol — jen Praha.
+ * ⚠️ NEOVĚŘENO. CSS selektory níže (`[data-project-item]`, `.ekospolProperty`,
+ * `[data-price]` …) jsou vymyšlené — nejsou odečtené ze skutečného HTML,
+ * protože vývojové prostředí na tyhle weby nepustí. Skoro jistě nebudou
+ * sedět a každý parser bude potřeba přepsat podle reálné struktury stránky.
+ *
+ * Postup až budeš mít přístup k síti: stáhni si stránku
+ * (`curl -A Mozilla https://www.trigema.cz/nemovitosti/ > /tmp/t.html`),
+ * najdi skutečné třídy a přepiš příslušný `parse*()`.
+ *
+ * Pozn.: HTML scraping je ze své podstaty křehký — rozbije se při každém
+ * redesignu. Kde to jde, hledej radši JSON, kterým si web plní výpis sám.
  */
 
 const DELAY_MS = 1500;

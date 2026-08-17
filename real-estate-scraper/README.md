@@ -68,11 +68,30 @@ npm run scrape:developers  # jen developer websites (Praha)
 npm run snapshot        # jen přepočet snímku trhu
 ```
 
-**Zdroje dat** — MVP sbírá z čtyř kanálů:
-- **Sreality.cz** — JSON API
-- **iDNES Reality** — JSON API
-- **Bezrealitky.cz** — JSON API
-- **Developer websites** — Trigema, Central Group, Ekospol (HTML parsing)
+### Stav jednotlivých zdrojů — čti před spuštěním
+
+Scrapery **nebyly ověřeny proti živým webům**. Vývojové prostředí má striktní
+allow-list odchozích spojení, takže na sreality.cz ani na ostatní zdroje se
+z něj nedá připojit (403 na CONNECT). Endpointy a selektory jsou tedy napsané
+podle očekávaného tvaru, ne podle skutečné odpovědi serveru.
+
+| Zdroj | Mechanismus | Důvěra |
+|---|---|---|
+| Sreality.cz | `api/cs/v2/estates` | **Střední** — jde o veřejné API, které pohání jejich vlastní web. Tvar odpovědi je pravděpodobně správný, ale netestováno. |
+| iDNES Reality | `api/v1/estates` | **Nízká** — endpoint i tvar odpovědi jsou odhad. Nejspíš bude potřeba přepsat. |
+| Bezrealitky.cz | `api/v2/estates` | **Nízká** — endpoint je odhad. Bezrealitky podle všeho jedou na GraphQL, takže tenhle REST tvar nejspíš neexistuje. |
+| Weby developerů | CSS selektory | **Nízká** — selektory (`[data-project-item]`, `.ekospolProperty`…) jsou vymyšlené, ne odečtené z HTML. |
+
+Ověření musí proběhnout na stroji bez těchhle síťových omezení:
+
+```bash
+npm run scrape:sreality   # začni tímhle, má nejvyšší šanci projít
+```
+
+Když zdroj vrátí nula inzerátů nebo spadne na parsování, otevři si odpověď
+serveru a srovnej ji s mapovací funkcí v příslušném souboru
+(`mapEstate` v `backend/scrapers/<zdroj>.js`). Parsovací vrstva
+(`normalize.js`) je otestovaná a sdílená, takže se obvykle mění jen mapování.
 
 Denní běh ve 2:00 zajišťuje `backend/cron.js`. Na serveru ho spusť jako
 službu (`node backend/cron.js`) nebo nech plánovat systémovým cronem.
@@ -138,9 +157,8 @@ frontend/src/
 
 ## Co ještě chybí
 
-- [x] iDNES Reality, Bezrealitky
-- [x] Weby developerů (Trigema, Central Group, Ekospol…)
-- [ ] Další developery (Vue Development, Central Group-projekty, atd.)
+- [ ] **Ověřit scrapery proti živým webům** — napsané jsou, otestované nejsou (viz tabulka výše)
+- [ ] Další developeři (Vue Development, Skanska Reality, JRD…)
 - [ ] Rozšíření na Brno a další krajská města
 - [ ] Reálné referenční nájmy místo odhadu z kupních cen
 - [ ] Hlídací pes — upozornění na nový nebo zlevněný inzerát

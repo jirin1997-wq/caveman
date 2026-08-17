@@ -3,9 +3,13 @@ import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
 
 /**
- * iDNES Reality má JSON API pro výpis nemovitostí.
- * Endpoint: https://reality.idnes.cz/api/v1/estates
- * Query params: regionId, page, limit
+ * iDNES Reality.
+ *
+ * ⚠️ NEOVĚŘENO. Endpoint i tvar odpovědi níže jsou odhad — vývojové prostředí
+ * nepustí odchozí spojení na reality.idnes.cz, takže se to nedalo vyzkoušet.
+ * Než na tohle navěsíš cron, pusť `npm run scrape:idnes` na stroji s přístupem
+ * na internet, vypiš si skutečnou odpověď a srovnej ji s `mapEstate()`.
+ * Čekej, že `regionId`, cesta i klíče v JSONu budou jiné.
  */
 
 const API = 'https://reality.idnes.cz/api/v1/estates';

@@ -3,8 +3,14 @@ import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
 
 /**
- * Bezrealitky.cz má veřejné JSON API.
- * Vrací seznam prodejů nemovitostí s podrobnostmi.
+ * Bezrealitky.cz.
+ *
+ * ⚠️ NEOVĚŘENO, a nejspíš rovnou špatně. Tenhle REST endpoint je odhad;
+ * Bezrealitky podle všeho jedou na GraphQL, takže `GET /v2/estates`
+ * pravděpodobně vůbec neexistuje. Vývojové prostředí na bezrealitky.cz
+ * nepustí (403 na CONNECT), takže se to nedalo ověřit ani opravit.
+ * Počítej s tím, že tenhle soubor bude potřeba přepsat od nuly na GraphQL
+ * dotaz, až si na stroji s přístupem k síti odchytíš, co web ve skutečnosti volá.
  */
 
 const API = 'https://api.bezrealitky.cz/v2/estates';
