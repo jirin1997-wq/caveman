@@ -9,9 +9,10 @@ scipy==1.11.4
 soundfile==0.12.1
 numpy==1.24.3
 
-# TTS — XTTS-v2 via coqui-tts
+# TTS — XTTS-v2 via coqui-tts with pinned versions for compatibility
 # IMPORTANT: PyTorch must be installed FIRST (see SETUP.md)
 coqui-tts==0.27.4
+transformers==4.35.2  # Compatible with coqui-tts (newer versions break isin_mps_friendly import)
 
 # Optional: Personality rewrite via Claude API
 # (only if ANTHROPIC_API_KEY in .env)
