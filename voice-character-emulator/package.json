@@ -15,7 +15,8 @@
   "dependencies": {
     "express": "^4.18.2",
     "dotenv": "^16.0.3",
-    "axios": "^1.4.0"
+    "axios": "^1.4.0",
+    "bark": "^0.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

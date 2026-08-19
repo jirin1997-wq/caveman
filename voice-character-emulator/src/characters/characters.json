@@ -86,5 +86,27 @@
         "voice_id": "novotny_charlie_cs"
       }
     }
+  },
+  "captain_sparrow": {
+    "name": "Captain Jack Sparrow",
+    "actor": "Johnny Depp",
+    "czech_dubbing_actor": "Václav Postránecký",
+    "personality": "Eccentric, charming pirate with unpredictable wit and swagger",
+    "voice_traits": {
+      "pitch": "medium_low",
+      "speed": "moderate",
+      "accent": "british_pirate",
+      "tone": "theatrical"
+    },
+    "languages": {
+      "en": {
+        "dubbing_type": "original",
+        "voice_id": "depp_sparrow_en"
+      },
+      "cs": {
+        "dubbing_type": "czech_actor",
+        "voice_id": "postranecky_sparrow_cs"
+      }
+    }
   }
 }

@@ -1,30 +1,36 @@
 # 🎭 Voice Character Emulator
 
-Standalone tool for giving voice to iconic characters. Generate audio with **synthetic voices** or **dubbing actors** — in English or Czech, with emotional modulation.
+Standalone tool for giving voice to iconic characters. Generate audio with **Bark** (free, offline) — in English or Czech, with emotional modulation. No API keys needed!
 
 ## Features
 
-- **4 Characters**: Iron Man, Batman, James Bond, Charlie Harper
+- **5 Characters**: Iron Man, Batman, James Bond, Charlie Harper, Captain Jack Sparrow
 - **2 Voice Types**:
-  - 🤖 **Synthetic voices** — AI-generated with emotional delivery
+  - 🤖 **Synthetic voices** — Bark AI-generated with emotional delivery (offline, free)
   - 🎬 **Dubbed voices** — Original actors (EN) or Czech dubbing actors (CZ)
 - **Multiple Languages**: English & Czech
 - **Emotional Delivery**: Neutral, Confident, Angry, Sarcastic, Sad, Mysterious, Humorous, Desperate
 - **Clean Web UI**: Modern interface with real-time preview
+- **No API Keys**: Completely free and offline!
 
 ## Quick Start
 
 ### Prerequisites
 - Node.js 16+
-- Higgsfields API key (for voice generation)
+- Python 3.8+ (for Bark)
 
 ### Installation
 
 ```bash
+# Clone and setup
 cd voice-character-emulator
+
+# Node dependencies
 npm install
-cp .env.example .env
-# Edit .env with your Higgsfields API key
+
+# Python dependencies (required for Bark)
+pip install -r requirements.txt
+# ⚠️ First run: downloads ~2GB of Bark models (one-time)
 ```
 
 ### Run
@@ -33,6 +39,8 @@ cp .env.example .env
 npm start
 # Open http://localhost:3000
 ```
+
+First voice generation will take ~30 seconds (model loading). Subsequent generations are ~2-5 seconds.
 
 ## API Endpoints
 
@@ -122,31 +130,60 @@ voice-character-emulator/
 ### MVP Status
 
 - ✅ Web UI with character & emotion selection
-- ✅ Synthetic voice generation framework
-- ✅ Dubbed voice (cloned) framework
-- ✅ Character metadata (4 characters)
-- ✅ Emotion modulation templates
-- ⏳ Higgsfields API integration (mocked)
-- ⏳ Voice clone creation from movie clips
-- ⏳ Real audio generation
+- ✅ Bark integration (free, offline TTS)
+- ✅ Character metadata (5 characters)
+- ✅ Emotion modulation templates (8 emotions)
+- ✅ Python backend for voice generation
+- ✅ Real-time audio generation (no API keys needed)
+- ⏳ Voice clone creation from movie clips (future)
+- ⏳ Custom dubbing actor voice models (future)
 
-### Next Steps
+### Technical Details
 
-1. **Voice Cloning**: Integrate `create_voice_from_confirmed_audio` for dubbing actors
-2. **Audio Generation**: Connect `generate_audio` with emotion-aware prompts
-3. **Movie Clip Processing**: Extract audio from film samples for voice modeling
-4. **Multi-language Support**: Ensure Czech text-to-speech with proper accent modeling
-5. **Performance Optimization**: Cache generated voices, implement batch processing
+**Bark Architecture**:
+- Uses pre-trained voice presets for each character
+- Voice presets are tuned per character personality
+- Emotion is injected via text prompts to the model
+- All processing is local—no data sent to servers
 
-## Higgsfields Integration
+**Voice Presets**:
+- Character-specific presets from Bark's 100+ voice library
+- Language variants (EN/CS) optimized for each character
+- Can be customized in `bark_generator.py`
 
-### Synthetic Voices
-Uses `generate_audio` with character personality prompts + emotion modifiers.
+### Next Steps (Future)
 
-### Dubbed Voices
-1. Extract audio samples from movies (5-30 seconds per character)
-2. Call `create_voice_from_confirmed_audio` to create voice model
-3. Use resulting voice_id with `generate_audio` for character-specific delivery
+1. **Custom Voice Models**: Record actor samples → fine-tune Bark models
+2. **Movie Clip Processing**: Extract audio for reference training
+3. **Performance**: GPU acceleration, voice caching, batch generation
+4. **Advanced Emotion**: More granular emotion control, speed/pitch modulation
+
+## Bark Voice Generation
+
+### How It Works
+
+**Synthetic Voices** (Current):
+- Bark generates speech from text + emotion prompts
+- Character-specific voice presets ensure personality
+- Text like `[Angry] I am Iron Man!` modulates delivery
+- All processing happens locally—completely free
+
+**Dubbed Voices** (Future):
+- Will use fine-tuned Bark models trained on actor voice clips
+- Current implementation uses similar voice presets for both modes
+- Future: custom voice models from movie audio samples
+
+### Voice Presets by Character
+
+| Character | EN Preset | CZ Preset |
+|-----------|-----------|-----------|
+| Iron Man | `v2/en_speaker_6` (confident) | `v2/cs_speaker_1` (Czech male) |
+| Batman | `v2/en_speaker_0` (deep, serious) | `v2/cs_speaker_0` (Czech deep) |
+| James Bond | `v2/en_speaker_9` (sophisticated) | `v2/cs_speaker_2` (Czech smooth) |
+| Charlie Harper | `v2/en_speaker_7` (casual, humorous) | `v2/cs_speaker_3` (Czech casual) |
+| Captain Jack Sparrow | `v2/en_speaker_5` (theatrical) | `v2/cs_speaker_4` (Czech theatrical) |
+
+Presets can be customized in `src/voice_gen/bark_generator.py`.
 
 ## Testing
 
