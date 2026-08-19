@@ -1,0 +1,90 @@
+{
+  "ironman": {
+    "name": "Iron Man",
+    "actor": "Robert Downey Jr.",
+    "czech_dubbing_actor": "Oldřich Kaiser",
+    "personality": "Confident, witty, sarcastic genius with tech obsession",
+    "voice_traits": {
+      "pitch": "slightly_high",
+      "speed": "moderate",
+      "accent": "american",
+      "tone": "sophisticated"
+    },
+    "languages": {
+      "en": {
+        "dubbing_type": "original",
+        "voice_id": "rdj_ironman_en"
+      },
+      "cs": {
+        "dubbing_type": "czech_actor",
+        "voice_id": "kaiser_ironman_cs"
+      }
+    }
+  },
+  "batman": {
+    "name": "Batman",
+    "actor": "Christian Bale",
+    "czech_dubbing_actor": "Stanislav Zindulka",
+    "personality": "Dark, serious, brooding detective with deep gravelly voice",
+    "voice_traits": {
+      "pitch": "low",
+      "speed": "slow",
+      "accent": "american",
+      "tone": "mysterious"
+    },
+    "languages": {
+      "en": {
+        "dubbing_type": "original",
+        "voice_id": "bale_batman_en"
+      },
+      "cs": {
+        "dubbing_type": "czech_actor",
+        "voice_id": "zindulka_batman_cs"
+      }
+    }
+  },
+  "jamesbond": {
+    "name": "James Bond",
+    "actor": "Daniel Craig",
+    "czech_dubbing_actor": "Petr Stach",
+    "personality": "Smooth, suave secret agent with British charm and deadly precision",
+    "voice_traits": {
+      "pitch": "medium",
+      "speed": "moderate",
+      "accent": "british",
+      "tone": "sophisticated"
+    },
+    "languages": {
+      "en": {
+        "dubbing_type": "original",
+        "voice_id": "craig_bond_en"
+      },
+      "cs": {
+        "dubbing_type": "czech_actor",
+        "voice_id": "stach_bond_cs"
+      }
+    }
+  },
+  "charlie_harper": {
+    "name": "Charlie Harper",
+    "actor": "Charlie Sheen",
+    "czech_dubbing_actor": "David Novotný",
+    "personality": "Sarcastic, witty struggling musician with self-deprecating humor",
+    "voice_traits": {
+      "pitch": "medium",
+      "speed": "fast",
+      "accent": "american",
+      "tone": "humorous"
+    },
+    "languages": {
+      "en": {
+        "dubbing_type": "original",
+        "voice_id": "sheen_charlie_en"
+      },
+      "cs": {
+        "dubbing_type": "czech_actor",
+        "voice_id": "novotny_charlie_cs"
+      }
+    }
+  }
+}

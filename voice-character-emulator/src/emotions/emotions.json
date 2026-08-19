@@ -1,0 +1,50 @@
+{
+  "neutral": {
+    "label": "Neutral",
+    "description": "Normal speaking voice",
+    "intensity": 0,
+    "prompt_modifier": ""
+  },
+  "confident": {
+    "label": "Confident",
+    "description": "Strong, self-assured delivery",
+    "intensity": 1,
+    "prompt_modifier": "Speak with absolute confidence and certainty. Emphasize key words. Authoritative tone."
+  },
+  "angry": {
+    "label": "Angry",
+    "description": "Aggressive, frustrated tone",
+    "intensity": 2,
+    "prompt_modifier": "Speak with anger and frustration. Use sharp intonation. Emphasize words with intensity."
+  },
+  "sarcastic": {
+    "label": "Sarcastic",
+    "description": "Witty, mocking delivery",
+    "intensity": 1,
+    "prompt_modifier": "Deliver with heavy sarcasm. Use ironic tone. Mock and joke while speaking."
+  },
+  "sad": {
+    "label": "Sad",
+    "description": "Melancholic, sorrowful tone",
+    "intensity": 2,
+    "prompt_modifier": "Speak with sadness and melancholy. Use slower pace. Emphasize emotional weight."
+  },
+  "mysterious": {
+    "label": "Mysterious",
+    "description": "Enigmatic, secretive delivery",
+    "intensity": 1,
+    "prompt_modifier": "Speak mysteriously and enigmatically. Pause for effect. Use hushed, intense tone."
+  },
+  "humorous": {
+    "label": "Humorous",
+    "description": "Funny, entertaining delivery",
+    "intensity": 1,
+    "prompt_modifier": "Deliver with humor and wit. Use comedic timing. Make it entertaining and funny."
+  },
+  "desperate": {
+    "label": "Desperate",
+    "description": "Urgent, pleading tone",
+    "intensity": 2,
+    "prompt_modifier": "Speak desperately and urgently. Show desperation in voice. Emphasize urgency."
+  }
+}
