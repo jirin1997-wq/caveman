@@ -1,61 +1,50 @@
-node_modules/
 .env
 .env.local
 .env.*.local
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dist/
-build/
-.DS_Store
 
-# Audio files (large, generated locally)
-*.mp3
+# Generated audio and reference uploads
+out/
+refs/
+refs_temp/
+
+# Reference voice samples (large audio files)
 *.wav
+*.mp3
 *.m4a
 *.flac
 *.ogg
 *.mp4
 
-# Voice training data
-voices/
-models/
-
-# Python cache
+# Python virtual environment and cache
+venv/
+env/
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
+dist/
+build/
+.Python
 .installed.cfg
 *.egg
 
-# IDEs
+# IDE and editor
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
-.DS_Store
 
 # OS
-Thumbs.db
 .DS_Store
+Thumbs.db
 
-# Bark models cache
-bark_models/
+# Model caches (XTTS will download on first run)
 .cache/
+.tts_cache/
+
+# Old v1 artifacts (for reference)
+voice_training_models/
+voices/
