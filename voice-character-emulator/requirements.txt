@@ -1,8 +1,19 @@
-# Bark - Free, offline voice synthesis
+# Voice synthesis and cloning
 bark-ml>=0.2.0
 scipy>=1.10.0
 numpy>=1.23.0
 
-# Optional: For better performance
-torch>=2.0.0  # GPU support recommended for faster generation
+# RVC (Retrieval-based Voice Conversion) - voice cloning
+rvc-python>=1.0.0
+librosa>=0.10.0
+
+# Media processing
+youtube-dl>=2021.12.17
+yt-dlp>=2023.12.30  # Better YouTube support
+pydub>=0.25.1
+ffmpeg-python>=0.2.1
+
+# Deep learning (GPU recommended)
+torch>=2.0.0
 torchaudio>=2.0.0
+torchvision>=0.15.0

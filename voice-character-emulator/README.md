@@ -16,31 +16,45 @@ Standalone tool for giving voice to iconic characters. Generate audio with **Bar
 ## Quick Start
 
 ### Prerequisites
-- Node.js 16+
-- Python 3.8+ (for Bark)
+- **Node.js 16+**
+- **Python 3.8+**
+- **ffmpeg** (for audio processing)
+  - macOS: `brew install ffmpeg`
+  - Linux: `sudo apt install ffmpeg`
+  - Windows: `choco install ffmpeg` or download from ffmpeg.org
 
 ### Installation
 
 ```bash
-# Clone and setup
 cd voice-character-emulator
 
-# Node dependencies
+# Node setup
 npm install
 
-# Python dependencies (required for Bark)
+# Python setup
 pip install -r requirements.txt
-# ⚠️ First run: downloads ~2GB of Bark models (one-time)
-```
 
-### Run
+# ⚠️ First run notes:
+# - Bark models: ~2GB download (one-time, ~2 min)
+# - YouTube clips: Auto-downloaded on first cloned voice use
+# - RVC training: First cloned voice takes ~1-2 min
 
-```bash
+# Test setup
 npm start
 # Open http://localhost:3000
 ```
 
-First voice generation will take ~30 seconds (model loading). Subsequent generations are ~2-5 seconds.
+### First Run Performance
+
+| Step | Time | Notes |
+|------|------|-------|
+| Bark model download | ~2 min | One-time, ~2GB |
+| YouTube clip download | ~30s | Per character, first time |
+| RVC voice model training | ~1 min | Per character, first time |
+| Generate synthetic voice | ~2-5s | Subsequent runs cached |
+| Generate cloned voice | ~5-10s | After voice model trained |
+
+**GPU recommended** for faster processing (especially RVC training).
 
 ## API Endpoints
 
@@ -158,32 +172,49 @@ voice-character-emulator/
 3. **Performance**: GPU acceleration, voice caching, batch generation
 4. **Advanced Emotion**: More granular emotion control, speed/pitch modulation
 
-## Bark Voice Generation
+## Voice Generation: Bark + RVC
 
-### How It Works
+### Architecture
 
-**Synthetic Voices** (Current):
-- Bark generates speech from text + emotion prompts
-- Character-specific voice presets ensure personality
-- Text like `[Angry] I am Iron Man!` modulates delivery
-- All processing happens locally—completely free
+**Synthetic Voices** 🤖:
+- Bark generates speech with character presets
+- Emotion injected via text prompts
+- Full local processing, completely free
 
-**Dubbed Voices** (Future):
-- Will use fine-tuned Bark models trained on actor voice clips
-- Current implementation uses similar voice presets for both modes
-- Future: custom voice models from movie audio samples
+**Cloned Voices** 🎬 (Real Actor Voices):
+1. **Download** movie clip from YouTube (trailer/scene)
+2. **Extract** audio segment (30-120 seconds)
+3. **Train** RVC voice model on actor's voice
+4. **Generate** TTS with voice conversion
+5. **Apply** emotion/speed modulation
 
-### Voice Presets by Character
+### How It Works (Cloned Mode)
 
-| Character | EN Preset | CZ Preset |
-|-----------|-----------|-----------|
-| Iron Man | `v2/en_speaker_6` (confident) | `v2/cs_speaker_1` (Czech male) |
-| Batman | `v2/en_speaker_0` (deep, serious) | `v2/cs_speaker_0` (Czech deep) |
-| James Bond | `v2/en_speaker_9` (sophisticated) | `v2/cs_speaker_2` (Czech smooth) |
-| Charlie Harper | `v2/en_speaker_7` (casual, humorous) | `v2/cs_speaker_3` (Czech casual) |
-| Captain Jack Sparrow | `v2/en_speaker_5` (theatrical) | `v2/cs_speaker_4` (Czech theatrical) |
+```
+YouTube Video
+    ↓ (youtube_extractor.py)
+Extract Actor Audio (22kHz WAV)
+    ↓ (rvc_voice_cloner.py)
+Train Voice Model (pitch/formant analysis)
+    ↓
+Generate TTS with Bark
+    ↓
+Apply Voice Conversion
+    ↓
+Character's Voice + Your Text 🎉
+```
 
-Presets can be customized in `src/voice_gen/bark_generator.py`.
+### Movie References
+
+| Character | Movie Clip | Duration |
+|-----------|-----------|----------|
+| Iron Man | Iron Man (2008) Trailer | 30-120s |
+| Batman | The Dark Knight Rises Trailer | 45-150s |
+| James Bond | Skyfall Trailer | 30-120s |
+| Charlie Harper | Two and a Half Men Opening | 20-90s |
+| Captain Jack | Pirates of Caribbean Trailer | 40-120s |
+
+URLs are auto-embedded in `youtube_extractor.py`.
 
 ## Testing
 
