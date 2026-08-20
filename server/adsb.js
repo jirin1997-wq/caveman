@@ -9,7 +9,13 @@
 // database has no value, the field stays null.
 
 const axios = require('axios');
-const { describeCategory, describeSquawk, wakeClass } = require('./aircraft-meta');
+const {
+  describeCategory,
+  describeSquawk,
+  describePositionSource,
+  openSkyPositionSource,
+  wakeClass,
+} = require('./aircraft-meta');
 
 const UA = 'atc-radio-app/2.0 (personal, non-commercial)';
 const NM_PER_KM = 0.539957;
@@ -54,6 +60,9 @@ function normalize(raw) {
     year: raw.year || null,
     category: raw.category || null,
 
+    // how this position was obtained — broadcast, rebroadcast, or computed
+    positionType: raw.positionType || null,
+
     source: raw.source,
     timestamp: Date.now(),
   };
@@ -61,6 +70,8 @@ function normalize(raw) {
   out.categoryName = describeCategory(out.category);
   out.wake = wakeClass(out.category);
   out.squawkMeaning = describeSquawk(out.squawk);
+  out.positionSource = describePositionSource(out.positionType);
+  out.estimatedPosition = out.positionSource ? out.positionSource.estimated : false;
   out.color = colorForAltitude(altitude, onGround);
   return out;
 }
@@ -87,6 +98,7 @@ function fromReadsb(list, source) {
         operator: a.ownOp,
         year: a.year,
         category: a.category,
+        positionType: a.type,
         source,
       })
     );
@@ -129,6 +141,7 @@ async function fromOpenSky(lat, lon, radiusKm) {
         vs: (s[11] || 0) * 196.85, // m/s -> ft/min
         onGround: s[8],
         squawk: s[14],
+        positionType: openSkyPositionSource(s[16]),
         source: 'opensky',
       })
     );

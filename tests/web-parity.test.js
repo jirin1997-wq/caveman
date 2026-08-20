@@ -40,7 +40,8 @@ function loadWebLogic() {
     pure + `
     return { AIRPORTS, normalize, fromReadsb, buildBoard, classify,
              distanceKm, bearingDeg, compass, wakeClass,
-             describeCategory, describeSquawk, colorForAltitude };`
+             describeCategory, describeSquawk, colorForAltitude,
+             describePositionSource, openSkyPositionSource, POSITION_SOURCES };`
   );
   return factory();
 }
@@ -55,17 +56,20 @@ const READSB = [
     desc: 'AIRBUS A-321neo', ownOp: 'Czech Airlines', year: '2019',
     category: 'A3', lat: 50.25, lon: 14.26, alt_baro: 3200,
     gs: 190, track: 200, baro_rate: -900, squawk: '4531',
+    type: 'adsb_icao',
   },
   {
     hex: '3c6444', flight: 'DLH42   ', t: 'B77W', r: 'D-ABCD',
     lat: 50.1015, lon: 14.2605, alt_baro: 'ground', gs: 8,
-    track: 120, category: 'A5',
+    track: 120, category: 'A5', type: 'adsb_icao',
   },
   {
     hex: '4ca7b2', flight: 'RYR8GT  ', t: 'B738', lat: 50.02, lon: 14.18,
     alt_baro: 7000, gs: 260, track: 40, baro_rate: 2200, category: 'A3',
+    type: 'mlat', // position computed on the ground, not broadcast
   },
-  // no registration, no type, emergency squawk — the "missing data" path
+  // no registration, no type, emergency squawk, unknown position source —
+  // the "missing data" path
   { hex: '3f1a2b', flight: 'XXX1', lat: 49.9, lon: 14.0, alt_baro: 15000, gs: 300, track: 90, squawk: '7700' },
 ];
 
@@ -118,6 +122,41 @@ test('emitter categories decode the same on both sides', () => {
     assert.deepEqual(web.describeCategory(code), serverMeta.describeCategory(code), `category ${code}`);
     assert.deepEqual(web.wakeClass(code), serverMeta.wakeClass(code), `wake ${code}`);
   }
+});
+
+test('a computed (MLAT) position is flagged as an estimate, a broadcast one is not', () => {
+  const [csa, , ryr, unknown] = web.fromReadsb(READSB, 'adsb.lol');
+
+  assert.equal(csa.positionSource.label, 'ADS-B');
+  assert.equal(csa.estimatedPosition, false, 'a broadcast position is a measurement');
+
+  assert.equal(ryr.positionSource.label, 'MLAT (dopočet)');
+  assert.equal(ryr.estimatedPosition, true, 'a computed position must be marked as one');
+  assert.match(ryr.positionSource.note, /odhad/);
+
+  // no `type` field at all: say nothing rather than assume ADS-B
+  assert.equal(unknown.positionSource, null);
+  assert.equal(unknown.estimatedPosition, false);
+});
+
+test('position sources decode the same on both sides', () => {
+  const codes = Object.keys(serverMeta.POSITION_SOURCES).concat(['ADSB_ICAO', 'nonsense', '', null]);
+  for (const code of codes) {
+    assert.deepEqual(
+      web.describePositionSource(code),
+      serverMeta.describePositionSource(code),
+      `position source ${code}`
+    );
+  }
+  // OpenSky reports the same thing as an index into a small table
+  for (const i of [0, 1, 2, 3, 4, -1, null, 'x']) {
+    assert.deepEqual(
+      web.openSkyPositionSource(i),
+      serverMeta.openSkyPositionSource(i),
+      `opensky position_source ${i}`
+    );
+  }
+  assert.equal(serverMeta.openSkyPositionSource(2), 'mlat', 'OpenSky index 2 is MLAT');
 });
 
 test('the movement board classifies identically to the server', () => {

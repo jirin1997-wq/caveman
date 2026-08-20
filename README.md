@@ -15,6 +15,7 @@ Aplikace je postavená na pravidle: **co není opravdové, netváří se jako op
 | **Typ letadla, imatrikulace, provozovatel** | databáze ADS-B sítě | Co transpondér nebo databáze nepošle, zůstane prázdné (pomlčka). Nikdy se nedoplňuje odhadem. |
 | **Fotky letadel** | Planespotters API | Hledá se podle hex kódu, který letadlo vysílá — takže je to **ten konkrétní trup nad tebou**, ne obecná fotka typu. S povinným uvedením autora. |
 | **Tabule příletů/odletů** | odvozeno z živých ADS-B | Kdo klesá k letišti, kdo stoupá pryč, kdo stojí na zemi. **Není to letový řád** — ten by chtěl placený zdroj, a ten si nevymýšlím. |
+| **Zdroj polohy (ADS-B / MLAT / TIS-B)** | pole `type` v odpovědi sítě | Rozlišuje **vysílanou** polohu od **dopočtené**. Co síť neoznačí, zůstane bez popisku — nedosazuje se „ADS-B" jen proto, že je nejčastější. |
 | **Rádio mezi uživateli** | tenhle server | Opravdový chat mezi lidmi připojenými k téhle instanci. **Není to ATC** a je to tak i označené v UI. |
 
 Co v aplikaci **není**: žádný generátor „realistických" ATC hlášek, žádná náhodná letadla dosazená místo chybějících dat. Dřívější verze tohle měla a označovala to jako „LIVE" — bylo to smyšlené a je to pryč.
@@ -30,6 +31,37 @@ Co v aplikaci **není**: žádný generátor „realistických" ATC hlášek, ž
 **Přepínače pozic** — Clearance · Ground · Tower · Approach · Departure · Radar/ACC · ATIS. Zobrazí se jen ty, pro které LiveATC u daného letiště opravdu feed má. Když má pozice víc feedů (např. Tower North/South), přibude druhý výběr.
 
 **Tabule provozu** — čtyři záložky: Přílety 🛬 / Odlety 🛫 / Na zemi 🅿 / Přelety ✈, s počtem u každé.
+
+**Rádio** — chat mezi lidmi připojenými k témuž serveru, kanál podle letiště.
+Volačka + role (pilot / ATC). **Není to ATC komunikace** — ta skutečná je ve
+zvuku z LiveATC o panel výš, a v UI je ten rozdíl napsaný.
+
+---
+
+## Vysílaná poloha vs. dopočtená (MLAT)
+
+Ne každé letadlo na radaru svoji polohu vysílá.
+
+**ADS-B** — letadlo samo hlásí, kde je. Přesné, a je toho většina.
+
+**MLAT** — letadlo vysílá jen odpověď transpondéru bez polohy. Několik přijímačů
+zachytí ten samý signál v mírně jiný okamžik a z rozdílu časů se poloha
+**dopočítá**. Je to odhad s chybou, ne měření. Přesně tohle má FlightRadar24
+navíc a proto vidí i pár letadel, která by jinak chyběla.
+
+Sítě `adsb.lol` a `airplanes.live` ten výpočet dělají a výsledek posílají spolu
+s ADS-B; OpenSky totéž hlásí číslem v `position_source`. Aplikace obojí zobrazí,
+ale **nesmí to splynout**:
+
+- na radaru je vysílaná poloha **plný** trojúhelník ▲, dopočtená jen **obrys** △
+- v detailu je řádek `Poloha` (`ADS-B` / `MLAT (dopočet)` / `TIS-B` / …) a pod ním
+  věta, co to znamená
+- když síť zdroj polohy neuvede, **řádek se nezobrazí vůbec** — místo aby se
+  hádalo
+
+Samotný MLAT výpočet dělat neumíme a nikdy nebudeme: potřebuje syrové časy
+příjmu z několika přijímačů se synchronizovanými hodinami, a ta data žádná síť
+veřejně nepouští.
 
 ---
 
@@ -179,12 +211,13 @@ Přidání dalšího = jeden řádek v `server/airports.js` **a v `web/index.htm
 npm test
 ```
 
-44 testů, doběhnou za necelou vteřinu, **žádný nepotřebuje síť**. Testuje se to, kde bugy skutečně bývají — parsování cizích dat:
+47 testů, doběhnou za pár vteřin, **žádný nepotřebuje síť**. Testuje se to, kde bugy skutečně bývají — parsování cizích dat:
 
 - rozbor stránky LiveATC a `.pls` playlistu (včetně případu „letiště feed nemá")
 - zařazení feedů do pozic podle id i podle popisku
 - normalizace ADS-B payloadu — že se `alt_baro: "ground"` přeloží na 0 ft, že chybějící imatrikulace zůstane `null`, že letadlo bez pozice vypadne
 - dekódování nouzových squawků a kategorií
+- že se **dopočtená poloha označí jako odhad** a vysílaná ne, a že neznámý zdroj polohy nedostane popisek
 - geometrie tabule: že brněnské letadlo nespadne do pražského „na zemi"
 - celá HTTP cesta proti podvržené síti, včetně toho, že **výpadek zdroje vrátí `live:false` s důvody, ne vymyšlený provoz**
 - že webová verze počítá **úplně stejně jako server** — stejná letiště, stejná normalizace, stejné zařazení do tabule

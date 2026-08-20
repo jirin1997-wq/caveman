@@ -193,6 +193,43 @@
   .stack { display: flex; flex-direction: column; gap: 8px; }
   .muted { color: var(--dimmer); font-size: 12px; }
   audio { width: 100%; margin-top: 8px; }
+
+  /* ---------- radio ---------- */
+  .msgs {
+    height: 190px;
+    overflow-y: auto;
+    background: #0d1218;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .msg { line-height: 1.35; }
+  .msg .who { font-weight: 700; font-family: ui-monospace, monospace; }
+  .msg .who.atc { color: #7fd0a0; }
+  .msg .who.pilot { color: #8fbaf0; }
+  .msg .at { color: var(--dimmer); font-size: 11px; margin-left: 6px; }
+  .row2 { display: flex; gap: 6px; margin-top: 8px; }
+  .row2 input { min-width: 0; }
+  .row2 input[type="text"] {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 7px 9px;
+  }
+  .row2 button {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 7px 12px;
+    cursor: pointer;
+  }
+  .row2 button:hover:not(:disabled) { border-color: var(--accent); }
+  .row2 button:disabled { opacity: .5; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -221,6 +258,7 @@
       <span><i style="background:#ffd93d"></i>&lt; 10 000 ft</span>
       <span><i style="background:#6bcf7f"></i>&lt; 25 000 ft</span>
       <span><i style="background:#4d96ff"></i>≥ 25 000 ft</span>
+      <span style="margin-left:auto">▲ vysílaná poloha · △ dopočtená (MLAT)</span>
     </div>
   </section>
 
@@ -243,6 +281,11 @@
       <h2>ATC audio</h2>
       <div class="body" id="audio-panel"></div>
     </div>
+    <div class="panel">
+      <h2>Rádio <span style="text-transform:none;letter-spacing:0">— mezi uživateli, není to ATC</span></h2>
+      <div class="body" id="radio-panel"></div>
+    </div>
+
     <div class="panel">
       <h2>Detail letadla</h2>
       <div class="body" id="detail">
@@ -298,8 +341,30 @@ const SPECIAL_SQUAWKS = {
   1200: { label: 'VFR (USA)', severity: 'info' },
   2000: { label: 'Vstup do řízeného prostoru', severity: 'info' },
 };
+// Jak byla poloha získána. Není to ozdoba: MLAT se počítá na zemi z rozdílu
+// časů příjmu, takže je to odhad s chybou — kdežto ADS-B je to, co letadlo samo
+// vysílá. Kreslit obojí stejně by z výpočtu udělalo měření.
+const POSITION_SOURCES = {
+  adsb_icao:      { label: 'ADS-B',            estimated: false, note: 'letadlo vysílá vlastní polohu' },
+  adsb_icao_nt:   { label: 'ADS-B (bez ID)',   estimated: false, note: 'letadlo vysílá polohu, bez trvalé adresy' },
+  adsb_other:     { label: 'ADS-B',            estimated: false, note: 'letadlo vysílá vlastní polohu' },
+  adsr_icao:      { label: 'ADS-R',            estimated: false, note: 'přeposláno pozemní stanicí' },
+  adsr_other:     { label: 'ADS-R',            estimated: false, note: 'přeposláno pozemní stanicí' },
+  tisb_icao:      { label: 'TIS-B',            estimated: false, note: 'poloha z radaru ATC, vysílaná zpět do éteru' },
+  tisb_other:     { label: 'TIS-B',            estimated: false, note: 'poloha z radaru ATC, vysílaná zpět do éteru' },
+  tisb_trackfile: { label: 'TIS-B',            estimated: false, note: 'poloha z radaru ATC, vysílaná zpět do éteru' },
+  adsc:           { label: 'ADS-C',            estimated: false, note: 'hlášení přes satelit, řídké' },
+  mlat:           { label: 'MLAT (dopočet)',   estimated: true,  note: 'spočteno z rozdílu časů příjmu na několika přijímačích — odhad, ne vysílaná poloha' },
+  mode_s:         { label: 'Mode-S',           estimated: true,  note: 'transpondér polohu nevysílá' },
+  other:          { label: 'jiný zdroj',       estimated: true,  note: null },
+};
+const OPENSKY_POSITION_SOURCES = ['adsb_icao', 'tisb_icao', 'mlat', 'other'];
+
 const describeCategory = (c) => (c ? CATEGORIES[String(c).toUpperCase()] || null : null);
 const describeSquawk = (s) => (s ? SPECIAL_SQUAWKS[String(s).padStart(4, '0')] || null : null);
+const describePositionSource = (t) => (t ? POSITION_SOURCES[String(t).toLowerCase()] || null : null);
+const openSkyPositionSource = (c) =>
+  Number.isInteger(Number(c)) ? OPENSKY_POSITION_SOURCES[Number(c)] || null : null;
 function wakeClass(category) {
   const c = String(category || '').toUpperCase();
   if (c === 'A5') return 'Heavy';
@@ -341,11 +406,17 @@ function normalize(raw) {
     operator: raw.operator || null,
     year: raw.year || null,
     category: raw.category || null,
+
+    // jak byla poloha získána — vysílaná, přeposlaná, nebo dopočtená
+    positionType: raw.positionType || null,
+
     source: raw.source,
   };
   out.categoryName = describeCategory(out.category);
   out.wake = wakeClass(out.category);
   out.squawkMeaning = describeSquawk(out.squawk);
+  out.positionSource = describePositionSource(out.positionType);
+  out.estimatedPosition = out.positionSource ? out.positionSource.estimated : false;
   out.color = colorForAltitude(altitude, onGround);
   return out;
 }
@@ -361,7 +432,8 @@ function fromReadsb(list, source) {
       vs: a.baro_rate ?? a.geom_rate,
       onGround: a.alt_baro === 'ground',
       squawk: a.squawk, type: a.t, desc: a.desc, reg: a.r,
-      operator: a.ownOp, year: a.year, category: a.category, source,
+      operator: a.ownOp, year: a.year, category: a.category,
+      positionType: a.type, source,
     }));
 }
 
@@ -464,7 +536,9 @@ const DIRECT_SOURCES = [
         gs: (s[9] || 0) * 1.94384,
         track: s[10],
         vs: (s[11] || 0) * 196.85,
-        onGround: s[8], squawk: s[14], source: 'opensky',
+        onGround: s[8], squawk: s[14],
+        positionType: openSkyPositionSource(s[16]),
+        source: 'opensky',
       }));
   }],
 ];
@@ -502,6 +576,13 @@ const state = {
   backendOk: false,
   photoCache: new Map(),
   timer: null,
+
+  // rádio
+  ws: null,
+  wsOk: false,
+  messages: [],
+  callsign: localStorage.getItem('atc.callsign') || '',
+  role: localStorage.getItem('atc.role') || 'pilot',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -612,14 +693,21 @@ function drawRadar() {
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(toRad(ac.heading || 0));
-    ctx.fillStyle = ac.color;
     ctx.beginPath();          // trojúhelník špičkou po kurzu
     ctx.moveTo(0, -9);
     ctx.lineTo(6, 7);
     ctx.lineTo(0, 4);
     ctx.lineTo(-6, 7);
     ctx.closePath();
-    ctx.fill();
+    if (ac.estimatedPosition) {
+      // dopočtená poloha (MLAT) — jen obrys, ať je na první pohled jiná
+      ctx.strokeStyle = ac.color;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = ac.color;
+      ctx.fill();
+    }
     if (sel) {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
@@ -736,8 +824,11 @@ function renderDetail() {
       ${row('Stoupání', (ac.verticalRate > 0 ? '+' : '') + Math.round(ac.verticalRate) + ' ft/min')}
       ${row('Squawk', ac.squawk)}
       ${row('Vzdálenost', ac.distanceKm + ' km ' + ac.compass)}
+      ${row('Poloha', ac.positionSource ? ac.positionSource.label : null)}
       ${row('Zdroj', ac.source)}
     </dl>
+    ${ac.positionSource && ac.positionSource.note
+      ? `<p class="muted" style="margin-top:10px">${esc(ac.positionSource.note)}</p>` : ''}
     ${ac.registration || ac.type ? '' : '<p class="muted" style="margin-top:10px">Tenhle zdroj neposílá typ ani imatrikulaci — pole zůstávají prázdná, nedoplňujeme je odhadem.</p>'}
   `;
 
@@ -834,6 +925,155 @@ function renderAudio() {
     </p>`;
 }
 
+/* ------------------------------------------------------------------ rádio */
+//
+// Chat mezi lidmi připojenými k témuž serveru. NENÍ to ATC a nikde se tak
+// netváří — skutečná komunikace řídících je ve zvuku z LiveATC vedle.
+// Bez backendu není s kým mluvit, tak se to rovnou napíše.
+
+function connectRadio() {
+  if (!state.backendOk) return;
+  if (state.ws) { try { state.ws.close(); } catch {} state.ws = null; }
+
+  const url = state.backend.replace(/^http/, 'ws');
+  let ws;
+  try {
+    ws = new WebSocket(url);
+  } catch {
+    return; // prohlížeč spojení odmítl — panel zůstane v „nepřipojeno"
+  }
+  state.ws = ws;
+
+  ws.onopen = () => {
+    state.wsOk = true;
+    ws.send(JSON.stringify({ type: 'SET_AIRPORT', icao: state.airport.icao }));
+    ws.send(JSON.stringify({ type: 'RADIO_HISTORY', channel: radioChannel() }));
+    renderMessages();
+  };
+
+  ws.onclose = () => { state.wsOk = false; renderMessages(); };
+  ws.onerror = () => { state.wsOk = false; renderMessages(); };
+
+  ws.onmessage = (ev) => {
+    let d;
+    try { d = JSON.parse(ev.data); } catch { return; }
+
+    if (d.type === 'RADIO_MESSAGE' && d.message) {
+      state.messages.push(d.message);
+      if (state.messages.length > 200) state.messages.shift();
+      renderMessages();
+    } else if (d.type === 'RADIO_HISTORY') {
+      state.messages = d.messages || [];
+      renderMessages();
+    } else if (d.type === 'TRAFFIC' && d.icao === state.airport.icao) {
+      // server posílá provoz sám — vezmeme ho, ať se nečeká na další dotaz
+      applyTraffic({ live: d.live, source: d.source, aircraft: d.aircraft || [], errors: d.errors || [] });
+    }
+  };
+}
+
+const radioChannel = () => state.airport.icao;
+
+// Postaví schránku panelu. Volá se jen když se změní režim nebo letiště —
+// nikdy při příchozí zprávě, jinak by uživateli mizel rozepsaný text.
+function renderRadio() {
+  const host = $('radio-panel');
+
+  if (!state.backendOk) {
+    host.dataset.shell = '';
+    host.innerHTML = `<p class="muted" style="margin:0">
+      Rádio potřebuje server — je to chat mezi lidmi připojenými k téže
+      instanci, takže bez něj není s kým mluvit. Pusť <code>npm run dev:server</code>
+      a otevři <b>localhost:3001</b>.</p>`;
+    return;
+  }
+
+  host.dataset.shell = 'live';
+  host.innerHTML = `
+    <div class="msgs" id="msgs"></div>
+    <div class="row2">
+      <input id="radio-callsign" type="text" style="flex:0 0 110px"
+             placeholder="volačka" value="${esc(state.callsign)}" maxlength="12">
+      <select id="radio-role" class="ctl" style="flex:0 0 auto">
+        <option value="pilot"${state.role === 'pilot' ? ' selected' : ''}>pilot</option>
+        <option value="atc"${state.role === 'atc' ? ' selected' : ''}>ATC</option>
+      </select>
+    </div>
+    <div class="row2">
+      <input id="radio-text" type="text" placeholder="zpráva na kanál ${esc(radioChannel())}…" maxlength="300">
+      <button id="radio-send">odeslat</button>
+    </div>
+    <p class="muted" id="radio-state" style="margin:6px 0 0"></p>`;
+
+  $('radio-callsign').addEventListener('change', (e) => {
+    state.callsign = e.target.value.toUpperCase().slice(0, 12);
+    localStorage.setItem('atc.callsign', state.callsign);
+    e.target.value = state.callsign;
+  });
+  $('radio-role').addEventListener('change', (e) => {
+    state.role = e.target.value;
+    localStorage.setItem('atc.role', state.role);
+  });
+  $('radio-send').addEventListener('click', sendRadio);
+  $('radio-text').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendRadio();
+  });
+
+  renderMessages();
+}
+
+// Překresluje jen seznam zpráv a stav spojení — vstupní pole zůstávají, jak
+// jsou, včetně rozepsaného textu a kurzoru.
+function renderMessages() {
+  const list = $('msgs');
+  if (!list) return;
+
+  const mine = state.messages.filter((m) => !m.channel || m.channel === radioChannel());
+  list.innerHTML = mine.length
+    ? mine.map((m) => `<div class="msg">
+         <span class="who ${m.role === 'atc' ? 'atc' : 'pilot'}">${esc(m.callsign || '?')}</span>
+         <span class="at">${esc(timeOf(m))}</span><br>${esc(m.text || '')}
+       </div>`).join('')
+    : `<div class="muted">Zatím ticho. Napiš první zprávu.</div>`;
+  list.scrollTop = list.scrollHeight;
+
+  const btn = $('radio-send');
+  if (btn) {
+    btn.disabled = !state.wsOk;
+    btn.textContent = state.wsOk ? 'odeslat' : 'nepřipojeno';
+  }
+  const st = $('radio-state');
+  if (st) st.textContent = state.wsOk ? '' : 'Spojení se serverem spadlo — obnov stránku.';
+}
+
+function timeOf(m) {
+  const t = m.timestamp || m.time;
+  const d = t ? new Date(t) : new Date();
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('cs');
+}
+
+function sendRadio() {
+  const textEl = $('radio-text');
+  const text = (textEl.value || '').trim();
+  const callsign = (state.callsign || '').trim();
+
+  if (!text) return;
+  if (!callsign) {
+    state.callsign = 'HOST';
+    localStorage.setItem('atc.callsign', state.callsign);
+  }
+  if (!state.ws || state.ws.readyState !== 1) return;
+
+  state.ws.send(JSON.stringify({
+    type: 'RADIO_TRANSMIT',
+    callsign: state.callsign,
+    role: state.role,
+    channel: radioChannel(),
+    text,
+  }));
+  textEl.value = '';
+}
+
 /* ------------------------------------------------------------------ hlášky */
 function renderNotice() {
   const host = $('notice-host');
@@ -886,6 +1126,9 @@ function renderAll() {
   drawRadar();
 }
 
+// Rádio se překresluje zvlášť — psaní do pole nesmí přerušit každý osmivteřinový
+// snímek provozu.
+
 function select(id) {
   state.selectedId = id;
   renderBoard();
@@ -894,6 +1137,21 @@ function select(id) {
 }
 
 /* -------------------------------------------------------------------- data */
+// Jedno místo, kam se zapisuje snímek provozu — chodí sem jak odpověď na dotaz,
+// tak to, co server sám pošle po WebSocketu.
+function applyTraffic(result) {
+  state.live = result.live;
+  state.source = result.source;
+  state.errors = result.errors || [];
+  state.aircraft = result.aircraft;
+  state.board = buildBoard(result.aircraft, state.airport);
+
+  if (state.selectedId && !state.board.all.some((a) => a.id === state.selectedId)) {
+    state.selectedId = null; // letadlo odletělo z dosahu
+  }
+  renderAll();
+}
+
 async function refresh() {
   const airport = state.airport;
   let result;
@@ -906,17 +1164,7 @@ async function refresh() {
     state.backendOk = false;
   }
   if (state.airport !== airport) return; // uživatel mezitím přepnul letiště
-
-  state.live = result.live;
-  state.source = result.source;
-  state.errors = result.errors || [];
-  state.aircraft = result.aircraft;
-  state.board = buildBoard(result.aircraft, airport);
-
-  if (state.selectedId && !state.board.all.some((a) => a.id === state.selectedId)) {
-    state.selectedId = null; // letadlo odletělo z dosahu
-  }
-  renderAll();
+  applyTraffic(result);
 }
 
 function startPolling() {
@@ -933,8 +1181,16 @@ $('airport').addEventListener('change', (e) => {
   state.selectedId = null;
   state.aircraft = [];
   state.board = buildBoard([], state.airport);
+  state.messages = [];
   renderAll();
   renderAudio();
+  renderRadio();
+
+  // kanál je letiště — po přepnutí si vyžádáme jeho historii
+  if (state.ws && state.ws.readyState === 1) {
+    state.ws.send(JSON.stringify({ type: 'SET_AIRPORT', icao: state.airport.icao }));
+    state.ws.send(JSON.stringify({ type: 'RADIO_HISTORY', channel: radioChannel() }));
+  }
   refresh();
 });
 
@@ -966,6 +1222,8 @@ $('btn-backend').addEventListener('click', async () => {
   }
   renderAll();
   renderAudio();
+  renderRadio();
+  connectRadio();
   refresh();
 });
 
@@ -983,6 +1241,8 @@ $('btn-backend').addEventListener('click', async () => {
   await probeBackend();
   renderAll();
   renderAudio();
+  renderRadio();
+  connectRadio();
   await refresh();
   startPolling();
 })();
