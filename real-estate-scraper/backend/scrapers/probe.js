@@ -14,6 +14,7 @@ import path from 'node:path';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { SOURCES, inspectJson, inspectHtml } from './shape.js';
+import { UA } from './http.js';
 
 const OUT_DIR = path.resolve(process.cwd(), 'probe-output');
 const TIMEOUT = Number(process.env.SCRAPER_TIMEOUT) || 30000;
@@ -51,7 +52,7 @@ function describeError(err) {
 async function probeJson(key, shape, city) {
   const res = await axios.get(shape.url, {
     params: shape.params ? shape.params(city) : undefined,
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RealityScout/0.1)', Accept: 'application/json' },
+    headers: { 'User-Agent': UA, Accept: 'application/json' },
     timeout: TIMEOUT,
     validateStatus: () => true
   });
@@ -74,7 +75,7 @@ async function probeJson(key, shape, city) {
 
 async function probeHtml(key, shape) {
   const res = await axios.get(shape.url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RealityScout/0.1)' },
+    headers: { 'User-Agent': UA },
     timeout: TIMEOUT,
     validateStatus: () => true
   });

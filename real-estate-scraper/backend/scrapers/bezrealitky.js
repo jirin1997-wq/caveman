@@ -1,152 +1,157 @@
+import * as cheerio from 'cheerio';
 import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
-import { fetchJsonPage, SourceError, sleep } from './http.js';
+import { fetchHtml, SourceError, sleep } from './http.js';
+import {
+  priceFromText,
+  areaFromCard,
+  dispositionFromCard,
+  localityFromCard,
+  cityFromLocality,
+  unnbsp
+} from './extract.js';
 
 /**
- * Bezrealitky.cz.
+ * Bezrealitky — čtení z HTML výpisu.
  *
- * ⚠️ NEOVĚŘENO, a nejspíš rovnou špatně. Tenhle REST endpoint je odhad;
- * Bezrealitky podle všeho jedou na GraphQL, takže `GET /v2/estates`
- * pravděpodobně vůbec neexistuje. Vývojové prostředí na bezrealitky.cz
- * nepustí (403 na CONNECT), takže se to nedalo ověřit ani opravit.
- * Počítej s tím, že tenhle soubor bude potřeba přepsat od nuly na GraphQL
- * dotaz, až si na stroji s přístupem k síti odchytíš, co web ve skutečnosti volá.
+ * Původní `api.bezrealitky.cz/v2/estates` byl odhad a vrací 404. Web běží
+ * na Next.js a data přicházejí přes GraphQL, ale vyrenderovaný výpis je
+ * v HTML, takže GraphQL rozebírat není nutné.
+ *
+ * Karta je `<article>` s hashovanou třídou z CSS modulů
+ * (`PropertyCard_propertyCard__moO_5`), vedle níž ale stojí i stabilní
+ * `propertyCard`. Ta se drží napříč nasazeními, takže se míří na ni.
+ *
+ * Výpis je celostátní — filtr na město dělá scraper sám nad adresou,
+ * protože dotaz na kraj vyžaduje interní OSM identifikátory.
  */
 
-const API = 'https://api.bezrealitky.cz/v2/estates';
+const BASE = 'https://www.bezrealitky.cz/vyhledat';
 
-const CITIES = {
-  praha: 'praha',
-  brno: 'brno'
+const MAX_PAGES = 15;
+const DELAY_MS = 1200;
+
+const HINT = 'Ověř tvar stránky: `npm run discover` — vypíše, kde na výpisu '
+  + 'reálně stojí cena, a podle toho se opraví parseListPage().';
+
+const CARD = 'article.propertyCard, article[class*="propertyCard"]';
+
+/** Rozebere jednu stránku výpisu. Čistá funkce nad HTML — testuje se bez sítě. */
+export function parseListPage(html, allowedCities = ['praha', 'brno']) {
+  const $ = cheerio.load(html);
+  const listings = [];
+
+  $(CARD).each((_, el) => {
+    const card = $(el);
+    const href = card.find('a[href*="/nemovitosti-byty-domy/"]').first().attr('href');
+    if (!href) return;
+
+    const price = priceFromText(card.find('.propertyPrice').text() || card.text());
+    if (!price) return;
+
+    const locality = localityFromCard($, card);
+    const city = cityFromLocality(locality, allowedCities);
+    if (!city) return; // zbytek republiky nás nezajímá
+
+    const label = unnbsp(card.find('h2').first().text()).trim();
+
+    listings.push({
+      url: new URL(href, 'https://www.bezrealitky.cz').href,
+      name: label || null,
+      price,
+      sizeM2: areaFromCard($, card),
+      disposition: dispositionFromCard($, card),
+      locality,
+      photos: [card.find('img[src]').first().attr('src')].filter(Boolean),
+      city
+    });
+  });
+
+  return listings;
+}
+
+const pageUrl = (page) => {
+  const url = new URL(BASE);
+  url.searchParams.set('offerType', 'PRODEJ');
+  url.searchParams.set('estateType', 'BYT');
+  if (page > 1) url.searchParams.set('page', String(page));
+  return url.href;
 };
 
-const PER_PAGE = 50;
-const MAX_PAGES = 30;
-const DELAY_MS = 800;
+export async function scrapeBezrealitky() {
+  console.log('🔍 Bezrealitky scraper start');
 
-const HINT = 'Tenhle zdroj nejspíš jede na GraphQL — otevři si síťovou kartu na bezrealitky.cz '
-  + 'a odchyť skutečný dotaz. Pak přepiš fetchPage(). Rychlá diagnóza: npm run probe';
+  const cities = (process.env.SCRAPER_CITIES || 'praha,brno')
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c === 'praha' || c === 'brno');
 
-function fetchPage(city, page) {
-  return fetchJsonPage({
-    source: 'Bezrealitky',
-    url: API,
-    params: { city, type: 'flat', transaction: 'sale', page, limit: PER_PAGE },
-    itemsPath: 'data',
-    totalPath: 'pagination.total',
-    hint: HINT
-  });
-}
-
-function mapEstate(estate, city) {
-  if (!estate.id) return null;
-
-  const labels = [];
-  if (estate.condition) labels.push(estate.condition);
-  if (estate.buildingType) labels.push(estate.buildingType);
-  if (estate.disposition) labels.push(estate.disposition);
-
-  const amenities = [];
-  if (estate.amenities) {
-    const amens = Array.isArray(estate.amenities) ? estate.amenities : [estate.amenities];
-    for (const a of amens) {
-      const lower = String(a).toLowerCase();
-      if (lower.includes('balkon') || lower.includes('balcony')) amenities.push('balkon');
-      if (lower.includes('terasa') || lower.includes('terrace')) amenities.push('terasa');
-      if (lower.includes('lodzie') || lower.includes('lodge')) amenities.push('lodzie');
-      if (lower.includes('garaz') || lower.includes('garage')) amenities.push('garaz');
-      if (lower.includes('parkovani') || lower.includes('parking')) amenities.push('parkovani');
-      if (lower.includes('vytah') || lower.includes('elevator')) amenities.push('vytah');
-      if (lower.includes('sklep') || lower.includes('cellar')) amenities.push('sklep');
-    }
-  }
-
-  return buildListing({
-    url: `https://www.bezrealitky.cz/nemovitosti-byty/${estate.id}`,
-    source: 'bezrealitky',
-    sourceName: 'Bezrealitky',
-    listingType: 'byt',
-    city,
-    name: estate.title,
-    price: estate.price,
-    locality: estate.address,
-    sizeM2: estate.usableArea || estate.totalArea,
-    disposition: estate.disposition,
-    lat: estate.latitude ?? null,
-    lng: estate.longitude ?? null,
-    labels,
-    description: estate.description,
-    photos: estate.images?.map?.((img) => img.url) || [],
-    completionYear: estate.yearBuilt
-  });
-}
-
-async function scrapeCity(city, cityName) {
-  console.log(`📍 Bezrealitky — ${cityName}`);
-  const collected = [];
+  const byUrl = new Map();
+  const errors = [];
 
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    let result;
+    const url = pageUrl(page);
+
+    let html;
     try {
-      result = await fetchPage(city, page);
+      html = await fetchHtml({ source: 'Bezrealitky', url, hint: HINT });
     } catch (err) {
-      if (page === 1) throw err; // zdroj je rozbitý, ne jen krátký
+      const msg = err instanceof SourceError ? err.format() : err.message;
+      if (page === 1) {
+        console.error(`✗ ${msg}`);
+        errors.push(msg);
+        break;
+      }
       console.warn(`  ! strana ${page} selhala (${err.message}) — beru, co mám`);
       break;
     }
 
-    if (result.items.length === 0) break;
-
-    for (const estate of result.items) {
-      const listing = mapEstate(estate, city);
-      if (listing) collected.push(listing);
+    // Karty se počítají před filtrem na město: stránka plná nabídek odjinud
+    // je něco jiného než stránka, na které scraper nenašel vůbec nic.
+    const cardsOnPage = cheerio.load(html)(CARD).length;
+    if (page === 1 && cardsOnPage === 0) {
+      const msg = new SourceError(
+        `stránka se načetla (${html.length} B), ale nenašla se ani jedna karta inzerátu`,
+        { source: 'Bezrealitky', url, hint: HINT }
+      ).format();
+      console.error(`✗ ${msg}`);
+      errors.push(msg);
+      break;
     }
 
-    if (page * PER_PAGE >= result.total) break;
+    const before = byUrl.size;
+    for (const listing of parseListPage(html, cities)) byUrl.set(listing.url, listing);
+    console.log(`  strana ${page}: ${cardsOnPage} karet, z toho ${byUrl.size - before} nových v Praze/Brně`);
+
+    // Celostátní výpis může mít celou stránku bez Prahy a Brna, takže se
+    // nesmí končit podle přírůstku — jen když stránka nemá karty vůbec.
+    if (cardsOnPage === 0) break;
+
     await sleep(DELAY_MS);
   }
 
-  if (collected.length === 0) {
-    console.warn(`  ! ${cityName}: zdroj odpověděl, ale mapování nevyrobilo žádný inzerát`);
-    console.warn(`    ${HINT}`);
-  }
+  const collected = [...byUrl.values()]
+    .map((raw) =>
+      buildListing({ ...raw, source: 'bezrealitky', sourceName: 'Bezrealitky', listingType: 'byt' })
+    )
+    .filter(Boolean);
 
   console.log(`  staženo ${collected.length} inzerátů`);
-  const stats = await saveBatch(collected, `${city}:`);
-  return { city, ok: collected.length > 0, stats };
-}
-
-export async function scrapeBezrealitky() {
-  console.log('🔍 Bezrealitky scraper start');
-  const cities = (process.env.SCRAPER_CITIES || 'praha,brno')
-    .split(',')
-    .map((c) => c.trim())
-    .filter((c) => CITIES[c]);
-
-  const results = [];
-  const errors = [];
-
-  for (const city of cities) {
-    try {
-      const cityName = city === 'praha' ? 'Praha' : 'Brno';
-      results.push(await scrapeCity(CITIES[city], cityName));
-    } catch (err) {
-      const msg = err instanceof SourceError ? err.format() : `${city}: ${err.message}`;
-      console.error(`✗ ${msg}`);
-      errors.push(msg);
-    }
-  }
-
-  const ok = results.some((r) => r.ok);
+  const stats = await saveBatch(collected, 'bezrealitky:');
+  const ok = collected.length > 0;
   console.log(ok ? '✓ Bezrealitky hotovo' : '✗ Bezrealitky nepřineslo žádná data');
-  return { source: 'Bezrealitky', ok, cities: results, errors };
+  return { source: 'Bezrealitky', ok, stats, errors };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { default: db } = await import('../db/index.js');
   scrapeBezrealitky()
-    .then(() => db.destroy())
-    .then(() => process.exit(0))
+    .then(async () => {
+      if (process.env.SCRAPER_SINK !== 'json') {
+        const { default: db } = await import('../db/index.js');
+        await db.destroy();
+      }
+      process.exit(0);
+    })
     .catch((err) => {
       console.error(err);
       process.exit(1);

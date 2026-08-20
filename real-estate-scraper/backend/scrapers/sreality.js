@@ -1,117 +1,121 @@
+import * as cheerio from 'cheerio';
 import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
-import { fetchJsonPage, SourceError, sleep } from './http.js';
-import { SREALITY_REGIONS } from './shape.js';
+import { fetchHtml, SourceError, sleep } from './http.js';
+import {
+  priceFromText,
+  areaFromCard,
+  dispositionFromCard,
+  localityFromCard,
+  unnbsp
+} from './extract.js';
 
 /**
- * Sreality má veřejné JSON API, které pohání jejich vlastní web.
- * Používáme ho místo parsování HTML — vrací rovnou GPS, plochu i štítky
- * a nerozbije se při každém redesignu stránky.
+ * Sreality — čtení z HTML výpisu.
  *
- * Endpoint: /api/cs/v2/estates
- *   category_main_cb=1  byty
- *   category_type_cb=1  prodej
- *   locality_region_id  kraj
+ * Původně tady bylo volání `/api/cs/v2/estates`. Ostrý běh ukázal, že
+ * takový endpoint neexistuje (HTTP 404); veřejné API, o kterém se psalo,
+ * dnes takhle dostupné není. Výpis se proto čte ze stránky, kterou vidí
+ * návštěvník.
  *
- * Pozn.: netestováno proti živému serveru — vývojové prostředí nepustí
- * odchozí spojení na sreality.cz. Jde ale o veřejné API, které pohání
- * jejich vlastní web, takže tvar odpovědi je pravděpodobně správný.
- * Ze všech čtyř zdrojů má tenhle nejvyšší šanci projít na první pokus.
+ * Karta inzerátu je `<li id="estate-list-item-{id}">`. Třídy jsou emotion
+ * hashe (`css-abbpa2`), které se mění při každém nasazení jejich webu —
+ * na těch se stavět nedá, na `id` ano. Uvnitř karty stojí tři odstavce
+ * v pořadí: název s dispozicí a plochou, adresa, cena.
  */
 
-const API = 'https://www.sreality.cz/api/cs/v2/estates';
+const BASE = 'https://www.sreality.cz/hledani/prodej/byty';
 
-const REGIONS = SREALITY_REGIONS;
+const CITY_PATHS = { praha: 'praha', brno: 'brno' };
 
-const PER_PAGE = 60;
-const MAX_PAGES = 20;          // strop, ať jeden běh netrvá hodiny
-const DELAY_MS = 1200;         // šetrné tempo vůči serveru
+const MAX_PAGES = 15;
+const DELAY_MS = 1200;
 
-const HINT = 'Ověř tvar odpovědi: npm run probe — surová data pak najdeš v probe-output/sreality.json';
+const HINT = 'Ověř tvar stránky: `npm run discover` — vypíše, kde na výpisu '
+  + 'reálně stojí cena, a podle toho se opraví parseListPage().';
 
-/** Jedna stránka výsledků. Vyhodí SourceError, když zdroj neodpoví v očekávaném tvaru. */
-function fetchPage(regionId, page) {
-  return fetchJsonPage({
-    source: 'Sreality',
-    url: API,
-    params: {
-      category_main_cb: 1,
-      category_type_cb: 1,
-      locality_region_id: regionId,
-      per_page: PER_PAGE,
-      page
-    },
-    itemsPath: '_embedded.estates',
-    totalPath: 'result_size',
-    hint: HINT
+/** Karta inzerátu; `region-tip-item` je tentýž tvar, jen propagovaná nabídka. */
+const CARD = 'li[id^="estate-list-item"], li[id^="region-tip-item"]';
+
+/**
+ * Rozebere jednu stránku výpisu.
+ * Čistá funkce nad HTML — testuje se bez sítě.
+ */
+export function parseListPage(html, city) {
+  const $ = cheerio.load(html);
+  const listings = [];
+
+  $(CARD).each((_, el) => {
+    const card = $(el);
+    const href = card.find('a[href*="/detail/"]').first().attr('href');
+    if (!href) return;
+
+    const paragraphs = card
+      .find('p')
+      .map((__, p) => unnbsp($(p).text()).trim())
+      .get()
+      .filter(Boolean);
+
+    const price = priceFromText(card.text());
+    if (!price) return;
+
+    listings.push({
+      url: new URL(href, 'https://www.sreality.cz').href,
+      name: paragraphs.find((t) => /m²|Prodej|Pronájem/i.test(t)) || paragraphs[0] || null,
+      price,
+      sizeM2: areaFromCard($, card),
+      disposition: dispositionFromCard($, card),
+      locality: localityFromCard($, card),
+      photos: [card.find('img[src]').first().attr('src')].filter(Boolean),
+      city
+    });
   });
+
+  return listings;
 }
 
-/** Převede záznam z API na normalizovaný tvar. */
-function mapEstate(estate, city) {
-  const hashId = estate.hash_id;
-  if (!hashId) return null;
+const pageUrl = (path, page) =>
+  page === 1 ? `${BASE}/${path}` : `${BASE}/${path}?strana=${page}`;
 
-  const gps = estate.gps || {};
-  const labels = [
-    ...(estate.labels || []),
-    ...(estate.labelsAll?.flat?.() || [])
-  ].filter((l) => typeof l === 'string');
-
-  const photos = (estate._links?.images || [])
-    .map((img) => img.href)
-    .filter(Boolean)
-    .slice(0, 8);
-
-  return buildListing({
-    url: `https://www.sreality.cz/detail/prodej/byt/x/x/${hashId}`,
-    source: 'sreality',
-    sourceName: 'Sreality',
-    listingType: 'byt',
-    city,
-    name: estate.name,
-    price: estate.price_czk?.value_raw ?? estate.price,
-    locality: estate.locality || estate.seo?.locality,
-    lat: gps.lat ?? null,
-    lng: gps.lon ?? gps.lng ?? null,
-    labels,
-    photos
-  });
-}
-
-async function scrapeCity(city, regionId) {
+async function scrapeCity(city) {
   console.log(`📍 Sreality — ${city}`);
-  const collected = [];
+  const byUrl = new Map();
 
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    let result;
+    const url = pageUrl(CITY_PATHS[city], page);
+
+    let html;
     try {
-      result = await fetchPage(regionId, page);
+      html = await fetchHtml({ source: 'Sreality', url, hint: HINT });
     } catch (err) {
-      // První stránka je ověření zdroje — když neprojde, je zdroj rozbitý
-      // a musí se to dozvědět volající. Výpadek na dalších stránkách
-      // znamená jen kratší dávku, s tím se dá pracovat.
+      // První stránka je ověření zdroje — když neprojde, je zdroj rozbitý.
+      // Výpadek dál znamená jen kratší dávku, s tou se dá pracovat.
       if (page === 1) throw err;
       console.warn(`  ! strana ${page} selhala (${err.message}) — beru, co mám`);
       break;
     }
 
-    if (result.items.length === 0) break;
+    const listings = parseListPage(html, city);
 
-    for (const estate of result.items) {
-      const listing = mapEstate(estate, city);
-      if (listing) collected.push(listing);
+    if (page === 1 && listings.length === 0) {
+      throw new SourceError(
+        `stránka se načetla (${html.length} B), ale nenašel se ani jeden inzerát`,
+        { source: 'Sreality', url, hint: HINT }
+      );
     }
 
-    if (page * PER_PAGE >= result.total) break;
+    // Stránkování se nedá ověřit dopředu; když další strana přinese jen
+    // to, co už máme, znamená to, že parametr neplatí nebo výpis skončil.
+    const before = byUrl.size;
+    for (const listing of listings) byUrl.set(listing.url, listing);
+    if (byUrl.size === before) break;
+
     await sleep(DELAY_MS);
   }
 
-  // Zdroj odpověděl, ale nic použitelného z něj nevypadlo — to je taky nález.
-  if (collected.length === 0) {
-    console.warn(`  ! ${city}: zdroj odpověděl, ale mapování nevyrobilo žádný inzerát`);
-    console.warn(`    ${HINT}`);
-  }
+  const collected = [...byUrl.values()]
+    .map((raw) => buildListing({ ...raw, source: 'sreality', sourceName: 'Sreality', listingType: 'byt' }))
+    .filter(Boolean);
 
   console.log(`  staženo ${collected.length} inzerátů`);
   const stats = await saveBatch(collected, `${city}:`);
@@ -127,14 +131,14 @@ export async function scrapeSreality() {
   const cities = (process.env.SCRAPER_CITIES || 'praha,brno')
     .split(',')
     .map((c) => c.trim())
-    .filter((c) => REGIONS[c]);
+    .filter((c) => CITY_PATHS[c]);
 
   const results = [];
   const errors = [];
 
   for (const city of cities) {
     try {
-      results.push(await scrapeCity(city, REGIONS[city]));
+      results.push(await scrapeCity(city));
     } catch (err) {
       const msg = err instanceof SourceError ? err.format() : `${city}: ${err.message}`;
       console.error(`✗ ${msg}`);
@@ -148,10 +152,14 @@ export async function scrapeSreality() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { default: db } = await import('../db/index.js');
   scrapeSreality()
-    .then(() => db.destroy())
-    .then(() => process.exit(0))
+    .then(async () => {
+      if (process.env.SCRAPER_SINK !== 'json') {
+        const { default: db } = await import('../db/index.js');
+        await db.destroy();
+      }
+      process.exit(0);
+    })
     .catch((err) => {
       console.error(err);
       process.exit(1);

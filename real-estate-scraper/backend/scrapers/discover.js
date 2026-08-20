@@ -19,13 +19,9 @@
 
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { UA } from './http.js';
 
 const TIMEOUT = Number(process.env.SCRAPER_TIMEOUT) || 30000;
-
-// Bez věrohodné hlavičky část webů odpoví jinak než prohlížeči.
-const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 // Adresy odečtené z prvního průzkumu, ne odhadnuté. U tří webů vedla
 // původní adresa jinam, než se čekalo: Central Group je na doméně

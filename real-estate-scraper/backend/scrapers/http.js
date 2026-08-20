@@ -11,7 +11,12 @@ import { getPath } from './shape.js';
 
 const TIMEOUT = () => Number(process.env.SCRAPER_TIMEOUT) || 30000;
 
-const UA = 'Mozilla/5.0 (compatible; RealityScout/0.1; +https://github.com/jirin1997-wq/caveman)';
+// Hlavička ověřená průzkumem — s ní všechny tři portály vracejí plný výpis.
+// Tempo dotazů drží scrapery na jedné stránce za 1,2 s, takže zdroj tím
+// nezatěžujeme víc než běžné procházení webu.
+export const UA = process.env.SCRAPER_UA
+  || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+     + '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 /** Chyba zdroje — nese s sebou, kde se to stalo a co s tím. */
 export class SourceError extends Error {

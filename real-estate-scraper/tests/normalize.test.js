@@ -42,6 +42,18 @@ describe('parseArea', () => {
     assert.equal(parseArea('Prodej bytu 3+kk 68,5 m2'), 68.5);
   });
 
+  test('číselná dispozice se nespojí s plochou', () => {
+    // „3+1 68 m²" dřív dávalo 168 m² — mezera se brala jako oddělovač
+    // tisíců i tam, kde za ní nestojí trojice číslic.
+    assert.equal(parseArea('Prodej bytu 3+1 68 m²'), 68);
+    assert.equal(parseArea('Prodej bytu 2+1 105 m²'), 105);
+    assert.equal(parseArea('Prodej bytu 4+1 1 250 m²'), 1250);
+  });
+
+  test('cena za metr se nezamění za plochu', () => {
+    assert.equal(parseArea('112 281 Kč / m²'), null);
+  });
+
   test('vrátí null pro text bez plochy', () => {
     assert.equal(parseArea('Prodej bytu'), null);
     assert.equal(parseArea(null), null);

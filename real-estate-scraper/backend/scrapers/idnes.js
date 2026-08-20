@@ -1,110 +1,123 @@
+import * as cheerio from 'cheerio';
 import { buildListing } from './normalize.js';
 import { saveBatch } from './store.js';
-import { fetchJsonPage, SourceError, sleep } from './http.js';
+import { fetchHtml, SourceError, sleep } from './http.js';
+import {
+  priceFromText,
+  areaFromCard,
+  dispositionFromCard,
+  localityFromCard,
+  cardsFromLinks,
+  unnbsp
+} from './extract.js';
 
 /**
- * iDNES Reality.
+ * iDNES Reality — čtení z HTML výpisu.
  *
- * ⚠️ NEOVĚŘENO. Endpoint i tvar odpovědi níže jsou odhad — vývojové prostředí
- * nepustí odchozí spojení na reality.idnes.cz, takže se to nedalo vyzkoušet.
- * Než na tohle navěsíš cron, pusť `npm run scrape:idnes` na stroji s přístupem
- * na internet, vypiš si skutečnou odpověď a srovnej ji s `mapEstate()`.
- * Čekej, že `regionId`, cesta i klíče v JSONu budou jiné.
+ * Původní `/api/v1/estates` byl odhad a vrací 404. Výpis se čte ze stránky.
+ * Značkování je ze všech tří portálů nejčistší: pojmenované BEM třídy
+ * (`c-products__price`, `c-products__content`), které se nemění s každým
+ * nasazením. Karty se přesto hledají podle odkazu na detail — tím je scraper
+ * odolný i vůči přejmenování tříd.
  */
 
-const API = 'https://reality.idnes.cz/api/v1/estates';
+const BASE = 'https://reality.idnes.cz/s/prodej/byty';
 
-const CITIES = {
-  praha: { name: 'Praha', regionId: 1 },
-  brno: { name: 'Brno', regionId: 7 }
-};
+const CITY_PATHS = { praha: 'praha', brno: 'brno' };
 
-const PER_PAGE = 30;
-const MAX_PAGES = 50;
-const DELAY_MS = 1000;
+const MAX_PAGES = 15;
+const DELAY_MS = 1200;
 
-const HINT = 'Ověř tvar odpovědi: npm run probe — surová data pak najdeš v probe-output/idnes.json';
+const DETAIL = /\/detail\/prodej\/byt\//;
 
-function fetchPage(regionId, page) {
-  return fetchJsonPage({
-    source: 'iDNES Reality',
-    url: API,
-    params: { regionId, page, limit: PER_PAGE, type: 'byt', transaction: 'prodej' },
-    itemsPath: 'result.items',
-    totalPath: 'result.total',
-    hint: HINT
-  });
+const HINT = 'Ověř tvar stránky: `npm run discover` — vypíše, kde na výpisu '
+  + 'reálně stojí cena, a podle toho se opraví parseListPage().';
+
+/**
+ * Adresa z adresy detailu, když ji karta neuvádí zvlášť.
+ * `/detail/prodej/byt/praha-8-ouholicka/<id>/` → „Ouholicka, Praha 8".
+ */
+export function localityFromHref(href) {
+  const match = String(href).match(/\/detail\/prodej\/byt\/([a-z0-9-]+)\//i);
+  if (!match) return null;
+
+  const parts = match[1].split('-');
+  const cityIndex = parts.findIndex((p) => p === 'praha' || p === 'brno');
+  if (cityIndex === -1) return null;
+
+  const city = parts[cityIndex] === 'praha' ? 'Praha' : 'Brno';
+  const next = parts[cityIndex + 1];
+  const district = /^\d+$/.test(next || '') ? `${city} ${next}` : city;
+  const street = parts.slice(/^\d+$/.test(next || '') ? cityIndex + 2 : cityIndex + 1).join(' ');
+
+  return street ? `${street}, ${district}` : district;
 }
 
-function mapEstate(estate, city, cityName) {
-  const id = estate.id || estate.hashId;
-  if (!id) return null;
+/** Rozebere jednu stránku výpisu. Čistá funkce nad HTML — testuje se bez sítě. */
+export function parseListPage(html, city) {
+  const $ = cheerio.load(html);
 
-  const labels = [];
-  if (estate.condition) labels.push(estate.condition);
-  if (estate.materialType) labels.push(estate.materialType);
-  if (estate.disposition) labels.push(estate.disposition);
+  return cardsFromLinks($, DETAIL)
+    .map(({ href, card }) => {
+      const price = priceFromText(card.find('.c-products__price').text() || card.text());
+      if (!price) return null;
 
-  const amenities = [];
-  if (estate.flags) {
-    if (estate.flags.hasBalcony) amenities.push('balkon');
-    if (estate.flags.hasTerrace) amenities.push('terasa');
-    if (estate.flags.hasLodge) amenities.push('lodzie');
-    if (estate.flags.hasGarage) amenities.push('garaz');
-    if (estate.flags.hasParking) amenities.push('parkovani');
-    if (estate.flags.hasElevator) amenities.push('vytah');
-    if (estate.flags.hasCellar) amenities.push('sklep');
-  }
+      const title = unnbsp(card.find('h2, h3').first().text()).trim() || null;
 
-  return buildListing({
-    url: `https://reality.idnes.cz/s/prodej/byty/${id}`,
-    source: 'idnes',
-    sourceName: 'iDNES Reality',
-    listingType: 'byt',
-    city,
-    name: estate.title,
-    price: estate.price,
-    locality: estate.locality,
-    sizeM2: estate.usableArea || estate.totalArea,
-    disposition: estate.disposition,
-    lat: estate.gps?.lat ?? null,
-    lng: estate.gps?.lng ?? null,
-    labels,
-    description: estate.description,
-    photos: estate.photos?.map?.((p) => p.url) || [],
-    completionYear: estate.completionYear
-  });
+      return {
+        url: new URL(href, 'https://reality.idnes.cz').href,
+        name: title,
+        price,
+        sizeM2: areaFromCard($, card),
+        disposition: dispositionFromCard($, card),
+        locality: localityFromCard($, card) || localityFromHref(href),
+        photos: [card.find('img[src]').first().attr('src')].filter(Boolean),
+        city
+      };
+    })
+    .filter(Boolean);
 }
 
-async function scrapeCity(city, cityName, regionId) {
-  console.log(`📍 iDNES Reality — ${cityName}`);
-  const collected = [];
+const pageUrl = (path, page) =>
+  page === 1 ? `${BASE}/${path}/` : `${BASE}/${path}/?page=${page}`;
+
+async function scrapeCity(city) {
+  console.log(`📍 iDNES Reality — ${city}`);
+  const byUrl = new Map();
 
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    let result;
+    const url = pageUrl(CITY_PATHS[city], page);
+
+    let html;
     try {
-      result = await fetchPage(regionId, page);
+      html = await fetchHtml({ source: 'iDNES Reality', url, hint: HINT });
     } catch (err) {
-      if (page === 1) throw err; // zdroj je rozbitý, ne jen krátký
+      if (page === 1) throw err;
       console.warn(`  ! strana ${page} selhala (${err.message}) — beru, co mám`);
       break;
     }
 
-    if (result.items.length === 0) break;
+    const listings = parseListPage(html, city);
 
-    for (const estate of result.items) {
-      const listing = mapEstate(estate, city, cityName);
-      if (listing) collected.push(listing);
+    if (page === 1 && listings.length === 0) {
+      throw new SourceError(
+        `stránka se načetla (${html.length} B), ale nenašel se ani jeden inzerát`,
+        { source: 'iDNES Reality', url, hint: HINT }
+      );
     }
 
-    if (page * PER_PAGE >= result.total) break;
+    const before = byUrl.size;
+    for (const listing of listings) byUrl.set(listing.url, listing);
+    if (byUrl.size === before) break;
+
     await sleep(DELAY_MS);
   }
 
-  if (collected.length === 0) {
-    console.warn(`  ! ${city}: zdroj odpověděl, ale mapování nevyrobilo žádný inzerát`);
-    console.warn(`    ${HINT}`);
-  }
+  const collected = [...byUrl.values()]
+    .map((raw) =>
+      buildListing({ ...raw, source: 'idnes', sourceName: 'iDNES Reality', listingType: 'byt' })
+    )
+    .filter(Boolean);
 
   console.log(`  staženo ${collected.length} inzerátů`);
   const stats = await saveBatch(collected, `${city}:`);
@@ -116,15 +129,14 @@ export async function scrapeIdnes() {
   const cities = (process.env.SCRAPER_CITIES || 'praha,brno')
     .split(',')
     .map((c) => c.trim())
-    .filter((c) => CITIES[c]);
+    .filter((c) => CITY_PATHS[c]);
 
   const results = [];
   const errors = [];
 
   for (const city of cities) {
     try {
-      const config = CITIES[city];
-      results.push(await scrapeCity(city, config.name, config.regionId));
+      results.push(await scrapeCity(city));
     } catch (err) {
       const msg = err instanceof SourceError ? err.format() : `${city}: ${err.message}`;
       console.error(`✗ ${msg}`);
@@ -138,10 +150,14 @@ export async function scrapeIdnes() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { default: db } = await import('../db/index.js');
   scrapeIdnes()
-    .then(() => db.destroy())
-    .then(() => process.exit(0))
+    .then(async () => {
+      if (process.env.SCRAPER_SINK !== 'json') {
+        const { default: db } = await import('../db/index.js');
+        await db.destroy();
+      }
+      process.exit(0);
+    })
     .catch((err) => {
       console.error(err);
       process.exit(1);

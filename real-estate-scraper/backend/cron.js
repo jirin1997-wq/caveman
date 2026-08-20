@@ -23,9 +23,17 @@ export async function runDaily() {
   const scrapers = [
     { name: 'Sreality', fn: scrapeSreality },
     { name: 'iDNES Reality', fn: scrapeIdnes },
-    { name: 'Bezrealitky', fn: scrapeBezrealitky },
-    { name: 'Developeři', fn: () => scrapeDevelopers('praha') }
+    { name: 'Bezrealitky', fn: scrapeBezrealitky }
   ];
+
+  // Weby developerů si výpis dotahují JavaScriptem — ve staženém HTML
+  // není ani jedna cena, takže z nich scraper nic vytáhnout nemůže
+  // (ověřeno průzkumem: Trigema i Ekospol odpoví 200 bez cen, Central
+  // Group vrací na výpisu 404). V denním běhu by jen plnily log chybami.
+  // Zapnout jde, kdyby některý z nich přešel na serverové renderování.
+  if (process.env.SCRAPER_DEVELOPERS === '1') {
+    scrapers.push({ name: 'Developeři', fn: () => scrapeDevelopers('praha') });
+  }
 
   const summary = [];
   for (const scraper of scrapers) {

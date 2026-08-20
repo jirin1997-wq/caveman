@@ -1,96 +1,67 @@
 /**
- * Co od každého zdroje čekáme za tvar odpovědi — a nástroj, který to ověří.
+ * Co od každého zdroje čekáme za tvar stránky — a nástroj, který to ověří.
  *
- * Proč to existuje: endpointy níže nebyly otestované proti živým webům
- * (vývojové prostředí nepustí odchozí spojení). Místo aby scraper při
- * neshodě tiše vrátil prázdný seznam, chceme vědět, KTERÉ konkrétní pole
- * chybí a jak odpověď doopravdy vypadá. `npm run probe` to vypíše.
+ * Popisy níže jsou odečtené z živých odpovědí (běh „Průzkum zdrojů"), ne
+ * odhadnuté. Smysl souboru zůstává: když zdroj změní tvar, `npm run probe`
+ * má říct KTERÝ selektor přestal platit, ne aby scraper tiše vrátil prázdno.
  *
  * Soubor je čistý — bez I/O, aby šel testovat samostatně.
  */
 
-/**
- * ID krajů pro Sreality. Praha = 10 je jisté; u Brna (Jihomoravský kraj)
- * si jistý nejsem — v číslování krajů to bývá 14 i 20 podle toho, jestli
- * se počítá od Prahy vzestupně. Proto jde přebít proměnnou prostředí,
- * ať kvůli špatné konstantě nemusí nikdo sahat do kódu.
- *   SREALITY_REGION_PRAHA=10 SREALITY_REGION_BRNO=20 npm run probe
- */
-export const SREALITY_REGIONS = {
-  praha: Number(process.env.SREALITY_REGION_PRAHA) || 10,
-  brno: Number(process.env.SREALITY_REGION_BRNO) || 14
-};
-
 export const SOURCES = {
   sreality: {
     label: 'Sreality',
-    kind: 'json',
-    confidence: 'střední — veřejné API, které pohání jejich vlastní web',
-    url: 'https://www.sreality.cz/api/cs/v2/estates',
-    params: (city) => ({
-      category_main_cb: 1,
-      category_type_cb: 1,
-      locality_region_id: SREALITY_REGIONS[city],
-      per_page: 3,
-      page: 1
-    }),
-    itemsPath: '_embedded.estates',
-    totalPath: 'result_size',
-    required: ['hash_id', 'name', 'locality'],
-    optional: ['price', 'price_czk', 'gps', 'labels', '_links'],
-    mappedIn: 'backend/scrapers/sreality.js → mapEstate()'
+    kind: 'html',
+    confidence: 'ověřeno — HTML výpis, karta je <li id="estate-list-item-…">',
+    url: 'https://www.sreality.cz/hledani/prodej/byty/praha',
+    // Třídy jsou emotion hashe (css-abbpa2) a mění se s každým nasazením
+    // jejich webu — proto se míří na id, ne na třídu.
+    selectors: ['li[id^="estate-list-item"]', 'a[href*="/detail/"]'],
+    mappedIn: 'backend/scrapers/sreality.js → parseListPage()'
   },
 
   idnes: {
     label: 'iDNES Reality',
-    kind: 'json',
-    confidence: 'nízká — endpoint i tvar odpovědi jsou odhad',
-    url: 'https://reality.idnes.cz/api/v1/estates',
-    params: () => ({ page: 1, limit: 3, type: 'byt', transaction: 'prodej' }),
-    itemsPath: 'result.items',
-    totalPath: 'result.total',
-    required: ['id', 'title', 'price'],
-    optional: ['locality', 'usableArea', 'disposition', 'gps', 'photos'],
-    mappedIn: 'backend/scrapers/idnes.js → mapEstate()'
+    kind: 'html',
+    confidence: 'ověřeno — HTML výpis s pojmenovanými BEM třídami',
+    url: 'https://reality.idnes.cz/s/prodej/byty/praha/',
+    selectors: ['.c-products__price', 'a[href*="/detail/prodej/byt/"]'],
+    mappedIn: 'backend/scrapers/idnes.js → parseListPage()'
   },
 
   bezrealitky: {
     label: 'Bezrealitky',
-    kind: 'json',
-    confidence: 'nízká — nejspíš rovnou špatně, web podle všeho jede na GraphQL',
-    url: 'https://api.bezrealitky.cz/v2/estates',
-    params: (city) => ({ city, type: 'flat', transaction: 'sale', page: 1, limit: 3 }),
-    itemsPath: 'data',
-    totalPath: 'pagination.total',
-    required: ['id', 'title', 'price'],
-    optional: ['address', 'usableArea', 'disposition', 'latitude', 'longitude', 'images'],
-    mappedIn: 'backend/scrapers/bezrealitky.js → mapEstate()'
+    kind: 'html',
+    confidence: 'ověřeno — HTML výpis; vedle hashovaných tříd nese i stabilní propertyCard',
+    url: 'https://www.bezrealitky.cz/vyhledat?offerType=PRODEJ&estateType=BYT',
+    selectors: ['article.propertyCard', '.propertyPrice', 'a[href*="/nemovitosti-byty-domy/"]'],
+    mappedIn: 'backend/scrapers/bezrealitky.js → parseListPage()'
   },
 
   trigema: {
     label: 'Trigema (developer)',
     kind: 'html',
-    confidence: 'nízká — CSS selektory jsou vymyšlené, ne odečtené z HTML',
-    url: 'https://www.trigema.cz/nemovitosti/',
-    selectors: ['[data-project-item]', '[data-title]', '[data-price]', '[data-area]'],
+    confidence: 'nefunkční — ceny nejsou ve statickém HTML, výpis dotahuje JavaScript',
+    url: 'https://www.trigema.cz/cs/nove-byty-praha/',
+    selectors: ['[data-project-item]', '[data-price]'],
     mappedIn: 'backend/scrapers/developers.js → parseTrigema()'
   },
 
   centralGroup: {
     label: 'Central Group (developer)',
     kind: 'html',
-    confidence: 'nízká — CSS selektory jsou vymyšlené',
-    url: 'https://www.centralgroup.cz/nemovitosti/',
-    selectors: ['.property-card', '[data-property]', '[data-price]', '.price'],
+    confidence: 'nefunkční — doména central-group.cz vrací na výpisu 404 a web je JS shell',
+    url: 'https://www.central-group.cz/',
+    selectors: ['.property-card', '[data-property]'],
     mappedIn: 'backend/scrapers/developers.js → parseCentralGroup()'
   },
 
   ekospol: {
     label: 'Ekospol (developer)',
     kind: 'html',
-    confidence: 'nízká — CSS selektory jsou vymyšlené',
-    url: 'https://www.ekospol.cz/nemovitosti/praha/',
-    selectors: ['.ekospolProperty', '[data-property-listing]', '.property-price'],
+    confidence: 'nefunkční — stránka se načte, ale ceny ve statickém HTML nejsou',
+    url: 'https://www.ekospol.cz/byty/prodej-bytu-praha/',
+    selectors: ['.ekospolProperty', '.property-price'],
     mappedIn: 'backend/scrapers/developers.js → parseEkospol()'
   }
 };
