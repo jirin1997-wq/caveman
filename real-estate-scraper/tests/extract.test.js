@@ -180,6 +180,40 @@ describe('localityFromCard', () => {
   });
 });
 
+describe('čtení plochy z karty — případy z ostrého běhu', () => {
+  test('plocha v prvku s ikonou se nepřehlédne', () => {
+    // Bezrealitky: <li><span><svg/></span>57 m²</li>. Prvek není list,
+    // takže se dřív přeskočil a scraper vzal až popisek o MHD.
+    const $ = cheerio.load(
+      '<div><li><span><svg></svg></span>57&nbsp;m²</li><p>MHD 1 minuta pěšky</p></div>'
+    );
+    assert.equal(areaFromCard($, $('div')), 57);
+  });
+
+  test('„1 minuta pěšky" není plocha', () => {
+    const $ = cheerio.load('<div><p>MHD 1 minuta pěšky • Výtah</p></div>');
+    assert.equal(areaFromCard($, $('div')), null);
+  });
+
+  test('CSS vložené do karty se nečte', () => {
+    // Sreality vkládají <style> přímo do karty; „300ms" v přechodu
+    // dřív prošlo jako plocha 300 m².
+    const $ = cheerio.load(
+      '<div><style>.x{transition:color 300ms ease;margin:2px}</style>'
+        + '<p>Prodej bytu 2+kk 58 m²</p></div>'
+    );
+    assert.equal(areaFromCard($, $('div')), 58);
+  });
+
+  test('jednotka musí být m², ne jakékoliv m', () => {
+    assert.equal(areaFromText('300ms'), null);
+    assert.equal(areaFromText('1 minuta'), null);
+    assert.equal(areaFromText('5 minut na metro'), null);
+    assert.equal(areaFromText('58 m²'), 58);
+    assert.equal(areaFromText('58 m2'), 58);
+  });
+});
+
 describe('celá karta dohromady', () => {
   test('Bezrealitky: cena, plocha, dispozice i adresa', () => {
     const $ = cheerio.load(BEZREALITKY);

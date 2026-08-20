@@ -19,18 +19,19 @@ export function parseDisposition(text) {
 /**
  * "75 m²" / "75 m2" / "1 250 m²" → 75.
  *
- * Dvě podmínky, obě kvůli číselným dispozicím („Prodej bytu 3+1 68 m²"):
+ * Tři podmínky, každá kvůli jedné záměně z ostrého běhu:
+ *   - jednotka musí být opravdu m² nebo m2. Volnější „m" bralo jako plochu
+ *     i „MHD 1 minuta pěšky" z popisku inzerátu a „300ms" z vloženého CSS.
  *   - mezera je oddělovač tisíců jen před skupinou přesně tří číslic,
- *     jinak by z „3+1 68 m²" vyšlo 168 m²,
- *   - číslo nesmí navazovat na `+` nebo na jinou číslici, jinak by
- *     z „2+1 105 m²" vyšlo 1105 m².
- * Obojí by tiše několikanásobně posunulo cenu za metr, a to u velké části
- * nabídky — číselné dispozice jsou běžné.
+ *     jinak z „3+1 68 m²" vyšlo 168 m²,
+ *   - číslo nesmí navazovat na `+` ani na jinou číslici, jinak z
+ *     „2+1 105 m²" vyšlo 1105 m².
+ * Všechno by tiše posunulo cenu za metr, a to u velké části nabídky.
  */
 export function parseArea(text) {
   if (!text) return null;
   const normalized = String(text).replace(/ /g, ' ');
-  const match = normalized.match(/(?<![+\d])(\d{1,3}(?: \d{3})+|\d+(?:[.,]\d+)?)\s*m/i);
+  const match = normalized.match(/(?<![+\d])(\d{1,3}(?: \d{3})+|\d+(?:[.,]\d+)?)\s*m(?:²|2)(?!\d)/i);
   if (!match) return null;
   const value = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
   return Number.isFinite(value) && value > 0 ? value : null;
@@ -108,6 +109,19 @@ export function parseAmenities(text) {
   return AMENITY_PATTERNS.filter(([, pattern]) => pattern.test(haystack)).map(([key]) => key);
 }
 
+/**
+ * Poslední pojistka proti nesmyslné ploše.
+ *
+ * Byt o 1 m² neexistuje, ale scraper takové číslo umí vyrobit, když se
+ * chytí špatného kusu textu — a jedna taková hodnota vystřelí cenu za metr
+ * do milionů a posune medián celé čtvrti. Radši plochu zahodit: inzerát
+ * bez plochy se do mediánu za m² prostě nepočítá, kdežto špatná plocha
+ * ho tiše pokazí.
+ */
+export function plausibleArea(value) {
+  return Number.isFinite(value) && value >= 8 && value <= 2000 ? value : null;
+}
+
 /** Cena za m² — počítá se, nikdy se nepřebírá ze zdroje. */
 export function pricePerM2(price, sizeM2) {
   if (!price || !sizeM2) return null;
@@ -123,7 +137,7 @@ export function buildListing(raw) {
   const price = parsePrice(raw.price);
   if (!raw.url || !price) return null;
 
-  const sizeM2 = raw.sizeM2 ?? parseArea(raw.name);
+  const sizeM2 = plausibleArea(raw.sizeM2 ?? parseArea(raw.name));
   const disposition = raw.disposition ?? parseDisposition(raw.name);
   const { district, neighborhood } = parseLocality(raw.locality);
   const labels = raw.labels || [];

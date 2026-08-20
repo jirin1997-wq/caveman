@@ -37,36 +37,60 @@ export const areaFromText = (text) => parseArea(unnbsp(text));
 export const dispositionFromText = (text) => parseDisposition(unnbsp(text));
 
 /**
- * Texty listových prvků karty, v pořadí, v jakém stojí na stránce.
+ * Vlastní texty prvků karty, v pořadí, v jakém stojí na stránce.
  *
- * Čtení musí jít po prvcích, ne ze slepeného textu celé karty. Bezrealitky
- * mají dispozici a plochu ve dvou sousedních <li> („3+1", „57 m²") a
- * `card.text()` z toho udělá „3+157 m²" — plocha by pak vyšla 157 místo 57
- * a cena za metr by byla u každého jejich inzerátu špatně.
+ * Bere jen textové uzly přímo pod prvkem, ne text potomků. Dva důvody,
+ * oba z ostrého běhu:
+ *
+ *   - Slepený `card.text()` nejde použít: Bezrealitky mají dispozici
+ *     a plochu ve dvou sousedních <li> („3+1", „57 m²") a na minifikované
+ *     stránce z toho vznikne „3+157 m²".
+ *   - Číst jen listové prvky taky ne: to samé <li> obsahuje ikonu, takže
+ *     list to není a „57 m²" by vypadlo. Scraper se pak chytil až popisku
+ *     „MHD 1 minuta pěšky" a zapsal plochu 1 m².
+ *
+ * `<style>` a `<script>` se přeskakují — Sreality vkládají CSS přímo do
+ * karty a „300ms" nebo „2px" v něm vypadá jako číslo s jednotkou.
  */
-export function leafTexts($, card) {
-  const texts = [];
+export function textPieces($, card) {
+  const pieces = [];
+
+  const ownText = (node) =>
+    node
+      .contents()
+      .filter((_, n) => n.type === 'text')
+      .map((_, n) => unnbsp(n.data).trim())
+      .get()
+      .filter(Boolean)
+      .join(' ');
+
+  const push = (node) => {
+    const text = ownText(node);
+    if (text) pieces.push(text);
+  };
+
+  push(card);
   card.find('*').each((_, el) => {
-    const node = $(el);
-    if (node.children().length > 0) return;
-    const text = unnbsp(node.text()).trim();
-    if (text) texts.push(text);
+    const tag = el.tagName || el.name;
+    if (tag === 'style' || tag === 'script') return;
+    push($(el));
   });
-  return texts;
+
+  return pieces;
 }
 
-/** Plocha z karty — první prvek, ze kterého se dá přečíst. */
+/** Plocha z karty — první kus textu, ze kterého se dá přečíst. */
 export function areaFromCard($, card) {
-  for (const text of leafTexts($, card)) {
+  for (const text of textPieces($, card)) {
     const area = areaFromText(text);
     if (area) return area;
   }
   return null;
 }
 
-/** Dispozice z karty — první prvek, ze kterého se dá přečíst. */
+/** Dispozice z karty — první kus textu, ze kterého se dá přečíst. */
 export function dispositionFromCard($, card) {
-  for (const text of leafTexts($, card)) {
+  for (const text of textPieces($, card)) {
     const disposition = dispositionFromText(text);
     if (disposition) return disposition;
   }

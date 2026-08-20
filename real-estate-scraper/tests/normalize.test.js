@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseDisposition,
   parseArea,
+  plausibleArea,
   parsePrice,
   parseLocality,
   parseBuildingType,
@@ -191,5 +192,22 @@ describe('buildListing', () => {
     assert.equal(listing.size_m2, null);
     assert.equal(listing.price_per_m2, null);
     assert.equal(listing.price, 12500000);
+  });
+});
+
+describe('plausibleArea', () => {
+  test('propustí běžnou plochu bytu', () => {
+    assert.equal(plausibleArea(58), 58);
+    assert.equal(plausibleArea(8), 8);
+  });
+
+  test('zahodí nesmysl, ať nepokazí medián za m²', () => {
+    // Jediný byt „o 1 m²" vystřelí cenu za metr do milionů a posune
+    // medián celé čtvrti. Bez plochy se do mediánu prostě nepočítá.
+    assert.equal(plausibleArea(1), null);
+    assert.equal(plausibleArea(0), null);
+    assert.equal(plausibleArea(50_000), null);
+    assert.equal(plausibleArea(null), null);
+    assert.equal(plausibleArea(NaN), null);
   });
 });
