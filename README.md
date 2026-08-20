@@ -130,11 +130,6 @@ Nemusíš nic buildit — postaví to GitHub za tebe, na všechny tři systémy:
 
 Rozbalíš ZIP, spustíš — appka si sama nastartuje server i okno. Node ani terminál k tomu nepotřebuješ.
 
-> **Zatím neověřeno.** Dřívější balíček byl rozbitý: okno načítalo port 3000, kde
-> v hotové appce nic neposlouchalo. Opraveno (okno teď načítá vnitřní server na
-> 3001, stejně jako varianta výše), ale nepodařilo se mi zabalenou appku
-> odzkoušet — až ji spustíš, dej vědět, jestli naběhne.
-
 > Appka není podepsaná certifikátem (ten stojí stovky dolarů ročně). Windows ukáže „SmartScreen: neznámý vydavatel" → **Více informací → Přesto spustit**. macOS → klikni pravým a **Otevřít**.
 
 ### Varianta: postavit appku u sebe
