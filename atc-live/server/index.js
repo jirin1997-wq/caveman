@@ -223,7 +223,7 @@ process.on('SIGTERM', () => {
 const PORT = process.env.PORT || 3001;
 if (require.main === module) {
   server.listen(PORT, () => {
-    console.log(`ATC Radio server na :${PORT}`);
+    console.log(`ATC Live server na :${PORT}`);
     console.log(`Výchozí letiště: ${DEFAULT_ICAO}`);
     console.log('Živé zdroje se volají za běhu — když je síť blokuje,');
     console.log('UI to napíše místo toho, aby si provoz vymyslelo.');

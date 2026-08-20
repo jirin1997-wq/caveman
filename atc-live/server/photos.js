@@ -37,7 +37,7 @@ async function photoForHex(hex) {
 
   const { data } = await axios.get(`https://api.planespotters.net/pub/photos/hex/${key}`, {
     timeout: 8000,
-    headers: { 'User-Agent': 'atc-radio-app/2.0 (personal, non-commercial)' },
+    headers: { 'User-Agent': 'atc-live/2.0 (personal, non-commercial)' },
   });
 
   const first = data && Array.isArray(data.photos) ? data.photos[0] : null;

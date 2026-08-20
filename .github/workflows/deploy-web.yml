@@ -1,6 +1,6 @@
 name: Deploy web app
 
-# Publishes web/index.html to GitHub Pages.
+# Publishes atc-live/web/index.html to GitHub Pages.
 #
 # ONE-TIME SETUP, needed before the first run can succeed:
 #   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions"
@@ -23,8 +23,15 @@ on:
     branches:
       - 'claude/atc-radio-app-**'
     paths:
-      - 'web/**'
+      - 'atc-live/web/**'
+      - 'atc-live/server/**'
       - '.github/workflows/deploy-web.yml'
+
+# The project lives in atc-live/; workflows must stay at the repository root,
+# so shell steps run from there.
+defaults:
+  run:
+    working-directory: atc-live
 
 permissions:
   contents: read
@@ -45,6 +52,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: atc-live/package-lock.json
       - run: npm ci
       # Guards the browser copy of the logic against drifting from the server's.
       - run: node --test tests/web-parity.test.js
@@ -66,7 +74,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web
+          path: atc-live/web
 
       - id: deployment
         uses: actions/deploy-pages@v4

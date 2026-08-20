@@ -95,7 +95,7 @@ export default function Home() {
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
         <div className="mx-auto max-w-[1600px] flex flex-wrap gap-3 items-center justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold">🛩️ ATC Radio</h1>
+            <h1 className="text-xl font-bold">🛩️ ATC Live</h1>
             <select
               value={airport?.icao || ''}
               onChange={(e) => changeAirport(e.target.value)}

@@ -83,7 +83,7 @@ app.on('ready', async () => {
     createWindow();
   } catch (err) {
     dialog.showErrorBox(
-      'ATC Radio se nepodařilo spustit',
+      'ATC Live se nepodařilo spustit',
       `Vnitřní server nenaběhl na portu ${PORT}.\n\n${err.message}\n\n` +
         `Nejčastější příčina je, že port už používá jiný program. ` +
         `Zavři ho a zkus to znovu.`

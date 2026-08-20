@@ -1,4 +1,4 @@
-# ✈️ ATC Radio
+# ✈️ ATC Live
 
 Živý provoz a živé ATC audio pro Ruzyň a další letiště. Běží lokálně.
 
@@ -67,9 +67,10 @@ veřejně nepouští.
 
 ## Spuštění
 
-### Takhle. Dva příkazy, funguje všechno.
+### Takhle. Tři příkazy, funguje všechno.
 
 ```bash
+cd atc-live
 npm install
 npm run dev:server
 ```
@@ -124,9 +125,9 @@ Nemusíš nic buildit — postaví to GitHub za tebe, na všechny tři systémy:
 2. vlevo vyber **Build desktop app**, vpravo klikni **Run workflow** (větev `claude/atc-radio-app-2xj5fz`)
 3. počkej ~10 minut, otevři doběhlý běh
 4. dole v sekci **Artifacts** stáhni podle svého systému:
-   - `atc-radio-windows` → `.exe` instalátor
-   - `atc-radio-macos` → `.dmg`
-   - `atc-radio-linux` → `.AppImage`
+   - `atc-live-windows` → `.exe` instalátor
+   - `atc-live-macos` → `.dmg`
+   - `atc-live-linux` → `.AppImage`
 
 Rozbalíš ZIP, spustíš — appka si sama nastartuje server i okno. Node ani terminál k tomu nepotřebuješ.
 
@@ -139,7 +140,7 @@ npm install
 npm run build:electron
 ```
 
-Vytvoří `dist/ATC Radio-1.0.0.AppImage` (Linux), `.exe` (Windows) nebo `.dmg` (Mac) — vždy pro systém, na kterém to pouštíš. Křížem to nejde: Windows build z Linuxu potřebuje wine, macOS build jen macOS. Proto ta CI výše.
+Vytvoří `dist/ATC Live-1.0.0.AppImage` (Linux), `.exe` (Windows) nebo `.dmg` (Mac) — vždy pro systém, na kterém to pouštíš. Křížem to nejde: Windows build z Linuxu potřebuje wine, macOS build jen macOS. Proto ta CI výše.
 
 ### Varianta: React verze (pro vývoj)
 
@@ -223,24 +224,30 @@ Poslední dva jsou tam schválně. Ten první je pojistka přesně proti chybě,
 
 ## Struktura
 
+Celý projekt žije ve složce `atc-live/`. V kořeni repozitáře zůstávají jen
+workflow soubory — GitHub Actions je jinde než v `.github/` nehledá.
+
 ```
-web/
-  index.html        celá webová verze v jednom souboru (bez buildu)
-server/
-  airports.js       letiště (ICAO + souřadnice, nic víc)
-  liveatc.js        hledání feedů + rozbalení .pls na adresu streamu
-  positions.js      zařazení feedů do pozic (Ground / Tower / Approach …)
-  adsb.js           živý provoz, tři zdroje za sebou, poctivé selhání
-  aircraft-meta.js  význam kategorií a squawků (ze specifikace ADS-B)
-  movements.js      tabule příletů/odletů odvozená z geometrie
-  photos.js         fotky přes Planespotters, podle hex kódu
-  radio.js          chat mezi uživateli (ne ATC)
-  index.js          REST + WebSocket + audio proxy
-app/
-  page.jsx          layout, výběr letiště, websocket
-  components/       RadarMap · RadioPanel · MovementBoard · InfoPanel
-  store.js          zustand
-tests/              35 testů, offline
+.github/workflows/  CI (běží s working-directory: atc-live)
+atc-live/
+  web/
+    index.html      celá webová verze v jednom souboru (bez buildu)
+  server/
+    airports.js     letiště (ICAO + souřadnice, nic víc)
+    liveatc.js      hledání feedů + rozbalení .pls na adresu streamu
+    positions.js    zařazení feedů do pozic (Ground / Tower / Approach …)
+    adsb.js         živý provoz, tři zdroje za sebou, poctivé selhání
+    aircraft-meta.js významy kategorií, squawků a zdrojů polohy (ze specifikace)
+    movements.js    tabule příletů/odletů odvozená z geometrie
+    photos.js       fotky přes Planespotters, podle hex kódu
+    radio.js        chat mezi uživateli (ne ATC)
+    index.js        REST + WebSocket + audio proxy + servírování web/
+  app/              React verze (navíc chat, jinak totéž)
+    page.jsx        layout, výběr letiště, websocket
+    components/     RadarMap · RadioPanel · MovementBoard · InfoPanel
+    store.js        zustand
+  electron-main.js  desktopová slupka — spustí server a načte ho v okně
+  tests/            47 testů, offline
 ```
 
 ---

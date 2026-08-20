@@ -17,7 +17,7 @@ const {
   wakeClass,
 } = require('./aircraft-meta');
 
-const UA = 'atc-radio-app/2.0 (personal, non-commercial)';
+const UA = 'atc-live/2.0 (personal, non-commercial)';
 const NM_PER_KM = 0.539957;
 
 function get(url, opts = {}) {

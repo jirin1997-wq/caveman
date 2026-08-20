@@ -108,7 +108,7 @@ test('GET / serves the web app from the same origin as the API', async () => {
 
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-type') || '', /text\/html/);
-  assert.match(html, /<title>ATC Radio/, 'the root must be the application page');
+  assert.match(html, /<title>ATC Live/, 'the root must be the application page');
   assert.match(html, /id="scope"/, 'the radar canvas must be present');
 });
 

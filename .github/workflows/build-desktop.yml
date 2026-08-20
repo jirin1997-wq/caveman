@@ -1,12 +1,15 @@
 name: Build desktop app
 
-# Builds the Electron desktop app for Windows, macOS and Linux.
+# Builds the ATC Live desktop app for Windows, macOS and Linux.
 # Each platform builds on its own runner because electron-builder needs the
 # native toolchain (Windows needs signtool, macOS needs hdiutil) — cross-building
 # from Linux does not work without wine.
 #
 # Run it from the Actions tab, then download the installer from "Artifacts"
 # at the bottom of the run page.
+#
+# The project lives in atc-live/; workflows have to stay at the repository root,
+# so every step runs from there via the defaults below.
 
 on:
   workflow_dispatch:
@@ -14,12 +17,17 @@ on:
     branches:
       - 'claude/atc-radio-app-**'
     paths:
-      - 'app/**'
-      - 'server/**'
-      - 'electron-main.js'
-      - 'preload.js'
-      - 'package.json'
+      - 'atc-live/app/**'
+      - 'atc-live/server/**'
+      - 'atc-live/web/**'
+      - 'atc-live/electron-main.js'
+      - 'atc-live/preload.js'
+      - 'atc-live/package.json'
       - '.github/workflows/build-desktop.yml'
+
+defaults:
+  run:
+    working-directory: atc-live
 
 jobs:
   test:
@@ -30,6 +38,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: atc-live/package-lock.json
       - run: npm ci
       - run: npm test
 
@@ -41,13 +50,13 @@ jobs:
         include:
           - os: windows-latest
             name: windows
-            artifact: 'dist/*.exe'
+            artifact: 'atc-live/dist/*.exe'
           - os: macos-latest
             name: macos
-            artifact: 'dist/*.dmg'
+            artifact: 'atc-live/dist/*.dmg'
           - os: ubuntu-latest
             name: linux
-            artifact: 'dist/*.AppImage'
+            artifact: 'atc-live/dist/*.AppImage'
 
     runs-on: ${{ matrix.os }}
 
@@ -58,6 +67,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: atc-live/package-lock.json
 
       - run: npm ci
 
@@ -69,9 +79,11 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # upload-artifact resolves paths from the repository root, not the
+      # working-directory default, so these stay prefixed.
       - uses: actions/upload-artifact@v4
         with:
-          name: atc-radio-${{ matrix.name }}
+          name: atc-live-${{ matrix.name }}
           path: ${{ matrix.artifact }}
           if-no-files-found: error
           retention-days: 30

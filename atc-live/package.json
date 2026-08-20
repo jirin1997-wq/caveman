@@ -1,12 +1,12 @@
 {
-  "name": "atc-radio-app",
+  "name": "atc-live",
   "version": "1.0.0",
-  "description": "Live ATC Radio Simulation - Prague Airport (LKPR)",
+  "description": "ATC Live — živý provoz a živé ATC audio pro Ruzyň a další letiště",
   "private": true,
   "main": "electron-main.js",
   "author": {
-    "name": "ATC Radio Team",
-    "email": "user@atc-radio.local"
+    "name": "ATC Live",
+    "email": "user@atc-live.local"
   },
   "homepage": "https://github.com",
   "scripts": {
@@ -46,8 +46,9 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.atc-radio.app",
-    "productName": "ATC Radio",
+    "appId": "com.atc-live.app",
+    "productName": "ATC Live",
+    "publish": null,
     "files": [
       "electron-main.js",
       "preload.js",
