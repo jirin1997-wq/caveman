@@ -1,4 +1,12 @@
-import db from '../db/index.js';
+import { jsonSinkEnabled, upsertJson } from './json-sink.js';
+
+/**
+ * Databáze se načítá až při prvním zápisu. V režimu `SCRAPER_SINK=json`
+ * (denní běh v CI) žádná není a statický import by si vyžádal konfiguraci,
+ * kterou tam nemáme.
+ */
+let dbPromise = null;
+const getDb = () => (dbPromise ??= import('../db/index.js').then((m) => m.default));
 
 /**
  * Uloží nebo aktualizuje inzerát a zaznamená změnu ceny.
@@ -8,7 +16,9 @@ import db from '../db/index.js';
  */
 export async function upsertListing(listing) {
   if (!listing?.url || !listing.price) return 'skipped';
+  if (jsonSinkEnabled()) return upsertJson(listing);
 
+  const db = await getDb();
   const existing = await db('listings').where('url', listing.url).first();
 
   if (!existing) {

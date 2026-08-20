@@ -1,10 +1,9 @@
 import schedule from 'node-schedule';
-import db from './db/index.js';
 import { scrapeSreality } from './scrapers/sreality.js';
 import { scrapeIdnes } from './scrapers/idnes.js';
 import { scrapeBezrealitky } from './scrapers/bezrealitky.js';
 import { scrapeDevelopers } from './scrapers/developers.js';
-import { writeSnapshot } from './jobs/snapshot.js';
+import { jsonSinkEnabled, flushJsonSink, writeJsonSnapshot } from './scrapers/json-sink.js';
 
 /**
  * Denní běh: všechny scrapery, pak snímek trhu.
@@ -43,7 +42,13 @@ export async function runDaily() {
   const anyData = summary.some((s) => s.ok);
   if (anyData) {
     try {
-      await writeSnapshot();
+      if (jsonSinkEnabled()) {
+        flushJsonSink();
+        writeJsonSnapshot();
+      } else {
+        const { writeSnapshot } = await import('./jobs/snapshot.js');
+        await writeSnapshot();
+      }
     } catch (err) {
       console.error('[CRON] Snímek selhal:', err.message);
     }
@@ -68,16 +73,23 @@ export async function runDaily() {
 // Každý den ve 2:00 místního času.
 export const job = schedule.scheduleJob('0 2 * * *', runDaily);
 
+/** V JSON režimu se žádné spojení neotevřelo, není co zavírat. */
+async function closeDb() {
+  if (jsonSinkEnabled()) return;
+  const { default: db } = await import('./db/index.js');
+  await db.destroy();
+}
+
 // Spuštění přímo z příkazové řádky: `node backend/cron.js --now`
 if (import.meta.url === `file://${process.argv[1]}` && process.argv.includes('--now')) {
   runDaily()
     .then(async (res) => {
-      await db.destroy();
+      await closeDb();
       process.exit(res.ok ? 0 : 1); // nenulový kód, ať si toho všimne i cron/CI
     })
     .catch(async (err) => {
       console.error(err);
-      await db.destroy();
+      await closeDb();
       process.exit(1);
     });
 }

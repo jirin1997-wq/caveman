@@ -1,0 +1,110 @@
+name: Denní scrape nemovitostí
+
+# Stáhne inzeráty ze všech zdrojů a výsledek commitne do `real-estate-scraper/data/`.
+# Databáze tu žádná není — běh jede v režimu SCRAPER_SINK=json, takže historie
+# commitů je zároveň historií trhu.
+#
+# Runner má na rozdíl od vývojového prostředí plný internet, takže tohle je
+# zároveň první skutečné ověření, jestli scrapery proti živým webům fungují.
+# Krok "Ověření zdrojů" vypisuje surové odpovědi do logu právě proto, aby
+# se mapovací funkce daly opravit podle reálného tvaru dat.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC denně
+  workflow_dispatch:       # a kdykoliv ručně tlačítkem v záložce Actions
+
+permissions:
+  contents: write
+
+# Dva běhy najednou by si přepsaly data/ pod rukama.
+concurrency:
+  group: scrape-reality
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: real-estate-scraper
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: real-estate-scraper/package-lock.json
+
+      - name: Instalace závislostí
+        run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Testy
+        run: npm test
+
+      - name: Ověření zdrojů
+        id: probe
+        continue-on-error: true
+        run: npm run probe
+
+      - name: Surové odpovědi zdrojů do logu
+        if: always()
+        run: |
+          for f in probe-output/*; do
+            [ -e "$f" ] || continue
+            echo "::group::$f ($(wc -c < "$f") B)"
+            head -c 4000 "$f"
+            echo
+            echo "::endgroup::"
+          done
+
+      - name: Stažení dat
+        id: scrape
+        continue-on-error: true
+        env:
+          SCRAPER_SINK: json
+          SCRAPER_CITIES: praha,brno
+        run: npm run scrape
+
+      # Commitujeme i částečnou dávku — když jeden zdroj vypadne, data
+      # z ostatních jsou pořád k něčemu. Prázdný diff se přeskočí.
+      - name: Commit dat
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --staged --quiet; then
+            echo "Žádná změna dat — není co commitovat."
+          else
+            git commit -m "data: scrape $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Souhrn
+        if: always()
+        run: |
+          {
+            echo "### Denní scrape $(date -u +%Y-%m-%d)"
+            echo
+            echo "- ověření zdrojů: \`${{ steps.probe.outcome }}\`"
+            echo "- stažení dat: \`${{ steps.scrape.outcome }}\`"
+            echo
+            if [ -f data/listings.json ]; then
+              echo "Inzerátů v datasetu: **$(node -p "require('./data/listings.json').count")**"
+            else
+              echo "Dataset zatím neexistuje — žádný zdroj nic nevrátil."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Selhání scrape kroku nesmí zmizet jen proto, že commit prošel.
+      - name: Nahlásit selhání
+        if: steps.scrape.outcome == 'failure'
+        run: |
+          echo "Scrape neuspěl — ani jeden zdroj nevrátil data."
+          echo "Podívej se do kroku 'Surové odpovědi zdrojů do logu' výš."
+          exit 1

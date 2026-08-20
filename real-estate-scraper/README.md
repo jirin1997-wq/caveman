@@ -130,15 +130,49 @@ poslední dobrá čísla.
 Denní běh ve 2:00 zajišťuje `backend/cron.js`. Na serveru ho spusť jako
 službu (`node backend/cron.js`) nebo nech plánovat systémovým cronem.
 
+## Denní běh bez serveru (GitHub Actions)
+
+`.github/workflows/scrape-reality.yml` stahuje data každý den ve 2:00 UTC
+a výsledek commitne do `real-estate-scraper/data/`. Žádná databáze ani
+hostitel k tomu nejsou potřeba — **historie commitů je zároveň historií trhu**.
+
+Spustit se dá i ručně: záložka **Actions → Denní scrape nemovitostí →
+Run workflow**. To je zatím jediný způsob, jak zdroje ověřit proti živým
+webům, pokud nemáš po ruce stroj bez síťových omezení.
+
+Běh vypisuje surové odpovědi zdrojů do logu (krok „Surové odpovědi zdrojů"),
+takže podle nich jde opravit mapování — stejná data, jaká lokálně ukládá
+`npm run probe` do `probe-output/`.
+
+Za režim zápisu odpovídá `SCRAPER_SINK`:
+
+| Hodnota | Kam se zapisuje |
+|---|---|
+| nenastaveno | PostgreSQL (`backend/scrapers/store.js`) |
+| `json` | `data/listings.json` + `data/market-snapshots.json` |
+
+Obě větve dělají stejný upsert: `first_seen_at` drží stáří inzerátu,
+změna ceny se zapíše do historie a zlevnění uschová původní cenu. Kdyby se
+rozešly, měl by graf vývoje cen jiný tvar podle toho, kde scraper běžel.
+
+```bash
+SCRAPER_SINK=json npm run scrape        # zápis do data/ místo do databáze
+SCRAPER_KEEP_DAYS=60 npm run scrape     # jak dlouho držet stažené inzeráty (výchozí 30)
+```
+
+Inzerát, který se v běhu neobjeví a je starší než `SCRAPER_KEEP_DAYS`,
+ze souboru vypadne — jinak by dataset donekonečna rostl o dávno prodané byty.
+
 ## Testy
 
 ```bash
 npm test
 ```
 
-Pokrývají parsování dat ze zdrojů (`backend/scrapers/normalize.js`) a
-vyhodnocovací logiku (`backend/lib/pricing.js`) — dvě místa, kde se chyba
-projeví jako tiše špatné číslo, ne jako pád.
+Pokrývají parsování dat ze zdrojů (`backend/scrapers/normalize.js`),
+vyhodnocovací logiku (`backend/lib/pricing.js`) a JSON zápis
+(`backend/scrapers/json-sink.js`) — místa, kde se chyba projeví jako tiše
+špatné číslo, ne jako pád.
 
 ## Struktura
 
@@ -150,7 +184,8 @@ backend/
 │   └── filters.js         Překlad filtrů na SQL
 ├── scrapers/
 │   ├── normalize.js       Čisté parsovací funkce (testované)
-│   ├── store.js           Ukládání + historie cen
+│   ├── store.js           Ukládání + historie cen (databáze / JSON)
+│   ├── json-sink.js       Zápis do data/*.json pro běh bez databáze
 │   ├── sreality.js        Sreality přes JSON API
 │   ├── idnes.js           iDNES Reality přes JSON API
 │   ├── bezrealitky.js     Bezrealitky přes JSON API
