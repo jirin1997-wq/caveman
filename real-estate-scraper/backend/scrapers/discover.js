@@ -27,13 +27,17 @@ const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
+// Adresy odečtené z prvního průzkumu, ne odhadnuté. U tří webů vedla
+// původní adresa jinam, než se čekalo: Central Group je na doméně
+// s pomlčkou a Ekospol z `/nemovitosti/praha/` přesměroval na článek
+// v tiskovém servisu.
 const TARGETS = [
   { key: 'sreality', url: 'https://www.sreality.cz/hledani/prodej/byty/praha' },
   { key: 'idnes', url: 'https://reality.idnes.cz/s/prodej/byty/praha/' },
   { key: 'bezrealitky', url: 'https://www.bezrealitky.cz/vyhledat?offerType=PRODEJ&estateType=BYT' },
-  { key: 'trigema', url: 'https://www.trigema.cz/' },
-  { key: 'centralGroup', url: 'https://www.centralgroup.cz/' },
-  { key: 'ekospol', url: 'https://www.ekospol.cz/nemovitosti/praha/' }
+  { key: 'trigema', url: 'https://www.trigema.cz/cs/nove-byty-praha/' },
+  { key: 'centralGroup', url: 'https://www.central-group.cz/nove-byty' },
+  { key: 'ekospol', url: 'https://www.ekospol.cz/byty/prodej-bytu-praha/' }
 ];
 
 const LISTING_WORDS = /nemovitost|byty|byt-|projekt|prodej|nabidka|nabídka|rezidence|vyhledat/i;
@@ -69,6 +73,7 @@ function signature($, el) {
  */
 export function priceContainers($) {
   const counts = new Map();
+  const samples = new Map();
 
   $('*').each((_, el) => {
     const node = $(el);
@@ -79,6 +84,7 @@ export function priceContainers($) {
     for (let up = 0; up < 4 && cur; up += 1) {
       const sig = signature($, cur);
       counts.set(sig, (counts.get(sig) || 0) + 1);
+      if (!samples.has(sig)) samples.set(sig, cur);
       cur = cur.parent && cur.parent.tagName ? cur.parent : null;
     }
   });
@@ -86,7 +92,8 @@ export function priceContainers($) {
   return [...counts.entries()]
     .filter(([sig]) => sig !== 'div' && sig !== 'span' && sig !== 'p')
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 12);
+    .slice(0, 12)
+    .map(([sig, n]) => [sig, n, samples.get(sig)]);
 }
 
 /** Cesty na API zmíněné přímo ve zdroji stránky. */
@@ -141,6 +148,16 @@ async function inspect({ key, url }) {
   if (prices.length) {
     console.log(`\n  ${C.b('prvky s cenou')} (počet výskytů — otisk):`);
     for (const [sig, n] of prices) console.log(`    ${String(n).padStart(4)}×  ${sig}`);
+
+    // Otisk sám o sobě řekne, kde karta začíná, ne odkud brát cenu a plochu.
+    // Proto se u opakovaných prvků vypíše i jejich vnitřek — z něj se dá
+    // mapování napsat rovnou, bez dalšího kola dohadů.
+    for (const [sig, n, el] of prices.filter(([, count]) => count >= 5).slice(0, 3)) {
+      if (!el) continue;
+      console.log(`\n  ${C.b('vnitřek prvku')} ${sig} (${n}×):`);
+      const html = ($.html(el) || '').replace(/\s+/g, ' ').trim();
+      console.log(`    ${html.slice(0, 2500)}${html.length > 2500 ? ' …' : ''}`);
+    }
   } else {
     console.log(`\n  ${C.bad('na stránce není žádná cena v Kč')} — výpis se nejspíš dotahuje `
       + 'JavaScriptem, takže statické HTML nestačí a je potřeba najít API.');
