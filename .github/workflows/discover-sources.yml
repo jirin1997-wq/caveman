@@ -1,0 +1,34 @@
+name: Průzkum zdrojů
+
+# Ruční diagnostika. Nic neukládá — jen se podívá, co weby zdrojů skutečně
+# vracejí, a vypíše kandidáty na URL a CSS selektory.
+#
+# Existuje proto, že první ostrý běh scraperu ukázal 404 u pěti zdrojů
+# ze šesti: endpointy byly napsané podle očekávání, ne podle skutečnosti.
+# Hádat je podruhé nemá smysl — tenhle běh se webu zeptá.
+
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: real-estate-scraper
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: real-estate-scraper/package-lock.json
+
+      - run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Průzkum
+        run: npm run discover
