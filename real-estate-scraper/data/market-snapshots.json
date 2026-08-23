@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-08-22T03:03:06.954Z",
+  "updated_at": "2026-08-23T03:12:05.633Z",
   "snapshots": [
     {
       "city": "brno",
@@ -2196,6 +2196,816 @@
       "median_price": 9286700,
       "sample_size": 95,
       "snapshot_date": "2026-08-22"
+    },
+    {
+      "city": "brno",
+      "district": "Brno",
+      "listing_type": "byt",
+      "median_price_per_m2": 145133,
+      "median_price": 9850000,
+      "sample_size": 55,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "brno",
+      "district": "Brno -",
+      "listing_type": "byt",
+      "median_price_per_m2": 130831,
+      "median_price": 7499000,
+      "sample_size": 750,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "brno",
+      "district": null,
+      "listing_type": "byt",
+      "median_price_per_m2": 131228,
+      "median_price": 7590000,
+      "sample_size": 805,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": null,
+      "listing_type": "byt",
+      "median_price_per_m2": 166915,
+      "median_price": 9540000,
+      "sample_size": 1549,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha",
+      "listing_type": "byt",
+      "median_price_per_m2": 159241,
+      "median_price": 8599000,
+      "sample_size": 25,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Běchovice",
+      "listing_type": "byt",
+      "median_price_per_m2": 125510,
+      "median_price": 6150000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Bohnice",
+      "listing_type": "byt",
+      "median_price_per_m2": 122367,
+      "median_price": 8999000,
+      "sample_size": 9,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Braník",
+      "listing_type": "byt",
+      "median_price_per_m2": 145454,
+      "median_price": 7174500,
+      "sample_size": 4,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Břevnov",
+      "listing_type": "byt",
+      "median_price_per_m2": 179057,
+      "median_price": 8490000,
+      "sample_size": 25,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Bubeneč",
+      "listing_type": "byt",
+      "median_price_per_m2": 186979,
+      "median_price": 17950000,
+      "sample_size": 7,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Čakovice",
+      "listing_type": "byt",
+      "median_price_per_m2": 164866,
+      "median_price": 12235113,
+      "sample_size": 15,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Černý Most",
+      "listing_type": "byt",
+      "median_price_per_m2": 112871,
+      "median_price": 7849500,
+      "sample_size": 10,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Chodov",
+      "listing_type": "byt",
+      "median_price_per_m2": 164048,
+      "median_price": 7790000,
+      "sample_size": 23,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Čimice",
+      "listing_type": "byt",
+      "median_price_per_m2": 142736,
+      "median_price": 11373250,
+      "sample_size": 4,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Ďáblice",
+      "listing_type": "byt",
+      "median_price_per_m2": 173571,
+      "median_price": 7290000,
+      "sample_size": 5,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Dejvice",
+      "listing_type": "byt",
+      "median_price_per_m2": 187736,
+      "median_price": 14031500,
+      "sample_size": 7,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Dolní Chabry",
+      "listing_type": "byt",
+      "median_price_per_m2": 152069,
+      "median_price": 8382000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Dolní Měcholupy",
+      "listing_type": "byt",
+      "median_price_per_m2": 135421,
+      "median_price": 8490000,
+      "sample_size": 3,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Dubeč",
+      "listing_type": "byt",
+      "median_price_per_m2": 186650,
+      "median_price": 11199000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Háje",
+      "listing_type": "byt",
+      "median_price_per_m2": 157789,
+      "median_price": 8490000,
+      "sample_size": 5,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Hloubětín",
+      "listing_type": "byt",
+      "median_price_per_m2": 162549,
+      "median_price": 9690000,
+      "sample_size": 11,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Hlubočepy",
+      "listing_type": "byt",
+      "median_price_per_m2": 150000,
+      "median_price": 9500000,
+      "sample_size": 17,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Holešovice",
+      "listing_type": "byt",
+      "median_price_per_m2": 200000,
+      "median_price": 10399900,
+      "sample_size": 33,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Horní Měcholupy",
+      "listing_type": "byt",
+      "median_price_per_m2": 157322,
+      "median_price": 7980000,
+      "sample_size": 6,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Horní Počernice",
+      "listing_type": "byt",
+      "median_price_per_m2": 170959,
+      "median_price": 12480000,
+      "sample_size": 3,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Hostivař",
+      "listing_type": "byt",
+      "median_price_per_m2": 165239,
+      "median_price": 7300000,
+      "sample_size": 21,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Hradčany",
+      "listing_type": "byt",
+      "median_price_per_m2": 181717,
+      "median_price": 17990000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Jinonice",
+      "listing_type": "byt",
+      "median_price_per_m2": 190974,
+      "median_price": 8886500,
+      "sample_size": 8,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Kamýk",
+      "listing_type": "byt",
+      "median_price_per_m2": 181226,
+      "median_price": 8778234,
+      "sample_size": 8,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Karlín",
+      "listing_type": "byt",
+      "median_price_per_m2": 255515,
+      "median_price": 13966000,
+      "sample_size": 26,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Kbely",
+      "listing_type": "byt",
+      "median_price_per_m2": 146138,
+      "median_price": 9499000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Klánovice",
+      "listing_type": "byt",
+      "median_price_per_m2": 162796,
+      "median_price": 19410000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Kobylisy",
+      "listing_type": "byt",
+      "median_price_per_m2": 131064,
+      "median_price": 8404500,
+      "sample_size": 8,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Kolovraty",
+      "listing_type": "byt",
+      "median_price_per_m2": 121202,
+      "median_price": 11999000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Košíře",
+      "listing_type": "byt",
+      "median_price_per_m2": 162881,
+      "median_price": 9490000,
+      "sample_size": 27,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Královice",
+      "listing_type": "byt",
+      "median_price_per_m2": 89610,
+      "median_price": 6900000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Krč",
+      "listing_type": "byt",
+      "median_price_per_m2": 150976,
+      "median_price": 7540000,
+      "sample_size": 6,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Kunratice",
+      "listing_type": "byt",
+      "median_price_per_m2": 156317,
+      "median_price": 12590000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Kyje",
+      "listing_type": "byt",
+      "median_price_per_m2": 144706,
+      "median_price": 10990000,
+      "sample_size": 7,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Letňany",
+      "listing_type": "byt",
+      "median_price_per_m2": 152192,
+      "median_price": 6895000,
+      "sample_size": 10,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Lhotka",
+      "listing_type": "byt",
+      "median_price_per_m2": 156667,
+      "median_price": 6425000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Libeň",
+      "listing_type": "byt",
+      "median_price_per_m2": 142340,
+      "median_price": 7090000,
+      "sample_size": 21,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Libuš",
+      "listing_type": "byt",
+      "median_price_per_m2": 107535,
+      "median_price": 9248000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Malá Strana",
+      "listing_type": "byt",
+      "median_price_per_m2": 227177,
+      "median_price": 25245000,
+      "sample_size": 6,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Malešice",
+      "listing_type": "byt",
+      "median_price_per_m2": 151216,
+      "median_price": 8890000,
+      "sample_size": 7,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Michle",
+      "listing_type": "byt",
+      "median_price_per_m2": 159209,
+      "median_price": 8277500,
+      "sample_size": 8,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Modřany",
+      "listing_type": "byt",
+      "median_price_per_m2": 166667,
+      "median_price": 10500000,
+      "sample_size": 13,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Nové Město",
+      "listing_type": "byt",
+      "median_price_per_m2": 206870,
+      "median_price": 13800000,
+      "sample_size": 29,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Nusle",
+      "listing_type": "byt",
+      "median_price_per_m2": 165745,
+      "median_price": 8690000,
+      "sample_size": 29,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Petrovice",
+      "listing_type": "byt",
+      "median_price_per_m2": 130290,
+      "median_price": 8990000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Pitkovice",
+      "listing_type": "byt",
+      "median_price_per_m2": 160577,
+      "median_price": 8350000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Podolí",
+      "listing_type": "byt",
+      "median_price_per_m2": 188447,
+      "median_price": 17295000,
+      "sample_size": 6,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Prosek",
+      "listing_type": "byt",
+      "median_price_per_m2": 137536,
+      "median_price": 8480000,
+      "sample_size": 11,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Radotín",
+      "listing_type": "byt",
+      "median_price_per_m2": 182511,
+      "median_price": 13750000,
+      "sample_size": 4,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Řeporyje",
+      "listing_type": "byt",
+      "median_price_per_m2": 207899,
+      "median_price": 13445000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Řepy",
+      "listing_type": "byt",
+      "median_price_per_m2": 182540,
+      "median_price": 13025000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Ruzyně",
+      "listing_type": "byt",
+      "median_price_per_m2": 130913,
+      "median_price": 6690000,
+      "sample_size": 11,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Smíchov",
+      "listing_type": "byt",
+      "median_price_per_m2": 196123,
+      "median_price": 12982560,
+      "sample_size": 75,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Sobín",
+      "listing_type": "byt",
+      "median_price_per_m2": 187183,
+      "median_price": 13290000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Staré Město",
+      "listing_type": "byt",
+      "median_price_per_m2": 225576,
+      "median_price": 18490000,
+      "sample_size": 8,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Stodůlky",
+      "listing_type": "byt",
+      "median_price_per_m2": 126533,
+      "median_price": 6900000,
+      "sample_size": 17,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Strašnice",
+      "listing_type": "byt",
+      "median_price_per_m2": 155063,
+      "median_price": 9349950,
+      "sample_size": 12,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Střížkov",
+      "listing_type": "byt",
+      "median_price_per_m2": 154132,
+      "median_price": 8169000,
+      "sample_size": 11,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Suchdol",
+      "listing_type": "byt",
+      "median_price_per_m2": 162338,
+      "median_price": 12500000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Točná",
+      "listing_type": "byt",
+      "median_price_per_m2": 158267,
+      "median_price": 11870000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Třebonice",
+      "listing_type": "byt",
+      "median_price_per_m2": 155470,
+      "median_price": 5344500,
+      "sample_size": 4,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Troja",
+      "listing_type": "byt",
+      "median_price_per_m2": 150015,
+      "median_price": 8945000,
+      "sample_size": 4,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Uhříněves",
+      "listing_type": "byt",
+      "median_price_per_m2": 172170,
+      "median_price": 7790000,
+      "sample_size": 5,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Újezd nad Lesy",
+      "listing_type": "byt",
+      "median_price_per_m2": 106393,
+      "median_price": 6490000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Újezd u Průhonic",
+      "listing_type": "byt",
+      "median_price_per_m2": 116724,
+      "median_price": 6770000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Vinohrady",
+      "listing_type": "byt",
+      "median_price_per_m2": 206290,
+      "median_price": 14299900,
+      "sample_size": 29,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Vinoř",
+      "listing_type": "byt",
+      "median_price_per_m2": 111871,
+      "median_price": 9435000,
+      "sample_size": 2,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Vokovice",
+      "listing_type": "byt",
+      "median_price_per_m2": 189195,
+      "median_price": 9225000,
+      "sample_size": 6,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Vršovice",
+      "listing_type": "byt",
+      "median_price_per_m2": 184862,
+      "median_price": 9122450,
+      "sample_size": 24,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Vyšehrad",
+      "listing_type": "byt",
+      "median_price_per_m2": 211695,
+      "median_price": 12490000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Vysočany",
+      "listing_type": "byt",
+      "median_price_per_m2": 183354,
+      "median_price": 12000000,
+      "sample_size": 20,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Záběhlice",
+      "listing_type": "byt",
+      "median_price_per_m2": 147727,
+      "median_price": 8499900,
+      "sample_size": 15,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Zbraslav",
+      "listing_type": "byt",
+      "median_price_per_m2": 107231,
+      "median_price": 13940000,
+      "sample_size": 1,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Žižkov",
+      "listing_type": "byt",
+      "median_price_per_m2": 169496,
+      "median_price": 9321909,
+      "sample_size": 50,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha - Zličín",
+      "listing_type": "byt",
+      "median_price_per_m2": 199722,
+      "median_price": 7190000,
+      "sample_size": 3,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 1",
+      "listing_type": "byt",
+      "median_price_per_m2": 235176,
+      "median_price": 17537000,
+      "sample_size": 33,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 10",
+      "listing_type": "byt",
+      "median_price_per_m2": 160744,
+      "median_price": 8734500,
+      "sample_size": 124,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 2",
+      "listing_type": "byt",
+      "median_price_per_m2": 237333,
+      "median_price": 16540000,
+      "sample_size": 37,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 3",
+      "listing_type": "byt",
+      "median_price_per_m2": 173750,
+      "median_price": 9484000,
+      "sample_size": 55,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 4",
+      "listing_type": "byt",
+      "median_price_per_m2": 150755,
+      "median_price": 8599900,
+      "sample_size": 121,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 5",
+      "listing_type": "byt",
+      "median_price_per_m2": 166667,
+      "median_price": 10955000,
+      "sample_size": 138,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 6",
+      "listing_type": "byt",
+      "median_price_per_m2": 165625,
+      "median_price": 10290000,
+      "sample_size": 51,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 7",
+      "listing_type": "byt",
+      "median_price_per_m2": 176025,
+      "median_price": 12994500,
+      "sample_size": 26,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 8",
+      "listing_type": "byt",
+      "median_price_per_m2": 156977,
+      "median_price": 8490000,
+      "sample_size": 63,
+      "snapshot_date": "2026-08-23"
+    },
+    {
+      "city": "praha",
+      "district": "Praha 9",
+      "listing_type": "byt",
+      "median_price_per_m2": 159820,
+      "median_price": 9247000,
+      "sample_size": 107,
+      "snapshot_date": "2026-08-23"
     }
   ]
 }
