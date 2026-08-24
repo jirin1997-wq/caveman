@@ -16,6 +16,7 @@ odlet. Musí platit obojí najednou.
 |---|---|
 | **Automatická detekce** | Vzlet a přistání se zapíšou samy, včetně touch & go |
 | **Výška nad terénem (AGL)** | Ze čtyř zdrojů, seřazených tak, aby to fungovalo bez signálu |
+| **Učí se plochy** | Letiště, které v databázi není (LKHN, soukromá louka), si zapamatuje samo |
 | **Deník** | Doba letu, odlet/přílet, max. výška, uletěná vzdálenost, nalétané hodiny |
 | **Trasa** | Celý let bod po bodu, na mapě, export do GPX |
 | **Export** | GPX na let, CSV na celý deník |
@@ -75,7 +76,8 @@ signál, takže nic online nesmí být základ:
 1. **Reference ze země** — medián výšky, kterou naměřila *ta samá* GPS, když
    letadlo stálo. Stejný přijímač, stejná systematická chyba, stejné místo. Pro
    domovské letiště přesnější než jakákoli mapa. Platí do 15 km a 12 hodin.
-2. **Databáze letišť** — publikovaná nadmořská výška plochy, offline.
+2. **Databáze ploch** — publikovaná nadmořská výška, offline. Sem patří i
+   plochy, které si aplikace zapamatovala sama (viz níže).
 3. **Cache** — dřív stažené dlaždice terénu (mřížka ~550 m, ukládá se natrvalo).
 4. **Online** — Open-Meteo elevation API, na pozadí, nikdy neblokuje detekci.
    Výsledek jde do cache pro příště.
@@ -95,6 +97,32 @@ událost se označí jako **nejistá**. Radši nejistý zápis než žádný.
 
 Průlet nad dráhou níž než ~9 m nad terénem se zapíše jako přistání. Je to daň
 za to, aby se chytily touch & go. Smaže se v deníku swipem.
+
+---
+
+## Plochy, které v žádné databázi nejsou
+
+LKHN, travnatá plocha za vsí, louka souseda. Žádný veřejný dataset je nepokrývá
+všechny a vypisovat je po paměti nemá cenu — špatná souřadnice nebo špatná
+elevace je horší než žádná.
+
+Aplikace to řeší tak, že se je **učí za letu**:
+
+1. Přistaneš někde, co nezná → založí si plochu `Plocha 1` na tom místě.
+2. Než odletíš, chvíli stojíš se zapnutým záznamem → naměří si nadmořskou výšku
+   té plochy a uloží si ji.
+3. V **Nastavení → Terén → Plochy a letiště** ji jednou přejmenuješ na `LKHN`.
+   Přejmenování opraví i lety, které už jsou v deníku zapsané.
+4. Od té chvíle je LKHN plnohodnotná plocha — v deníku má jméno a výška nad
+   zemí funguje **od prvního fixu po zapnutí, offline, bez signálu**, ještě než
+   se letadlo rozjede.
+
+Nechceš čekat na první přistání? **Přidat aktuální polohu** ve stejné obrazovce
+zapíše plochu hned, i s naměřenou výškou, pokud už nějakou má.
+
+Vlastní plochy mají přednost před datasetem, když jsou blíž. Naměřená výška
+naopak **nikdy nepřepíše** publikovanou elevaci z datasetu — ruční GPS na to
+není.
 
 ---
 
@@ -157,7 +185,7 @@ flight-logger-ios/
 │   │   ├── FlightStore.swift         deník + trasy + export
 │   │   ├── AppSettings.swift
 │   │   └── AppPaths.swift
-│   ├── Views/                    # SwiftUI
+│   ├── Views/                    # SwiftUI (včetně AirfieldsView — správa ploch)
 │   └── Resources/airports.json   # seed databáze letišť
 ├── FlightLoggerTests/            # XCTest — detekce, terén, geometrie
 └── tools/
@@ -177,7 +205,9 @@ souřadnice a kódy, ale **`elevation: null`**. To je záměr: přibližná polo
 stačí na pojmenování odletu, ale špatná nadmořská výška by šla rovnou do AGL, na
 kterém stojí celá detekce. Radši žádné číslo než číslo po paměti.
 
-Skutečné elevace se doplní importem veřejných dat:
+Pro plochy, kde létáš, to řeší učení popsané výš — aplikace si výšku naměří
+sama a je přesnější než tabulka. Pro zbytek světa se elevace doplní importem
+veřejných dat:
 
 ```bash
 curl -O https://davidmegginson.github.io/ourairports-data/airports.csv
@@ -233,5 +263,6 @@ Poctivě, protože to není jedno:
 - Barometrická výška z tlakoměru iPhonu (`CMAltimeter`) — mnohem tišší signál
   než GPS, ideální doplněk pro stoupání.
 - Import celé databáze letišť rovnou v aplikaci (stáhnout, ne importovat soubor).
+- Sdílení naučených ploch mezi zařízeními (iCloud).
 - Widget / Live Activity s dobou letu na zamčené obrazovce.
 - Export do formátu deníku (např. logbook CSV pro EASA formuláře).

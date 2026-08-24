@@ -26,7 +26,7 @@ final class FlightRecorder: ObservableObject {
     let elevationProvider: CombinedElevationProvider
 
     private let detector: FlightDetector
-    private let airports: AirportDatabase
+    let airports: AirportDatabase
 
     private var pendingTrack: [TrackPoint] = []
     private var lastTrackFlush = Date.distantPast
@@ -106,6 +106,12 @@ final class FlightRecorder: ObservableObject {
         if detector.phase != .airborne, detector.phase != .approach, snapshot.speed >= 0, snapshot.speed < 2 {
             elevationProvider.noteGroundSample(fix)
             persistGroundReferenceIfWorthwhile(now: fix.timestamp)
+            // Parked at a strip the app learned but has no elevation for yet:
+            // this is the moment it can measure one. Next visit to that field
+            // has AGL from the first fix, before the aircraft even moves.
+            if let reference = elevationProvider.groundReference {
+                airports.noteMeasuredElevation(reference.meters, at: fix.coordinate)
+            }
         } else if detector.phase == .airborne {
             elevationProvider.endGroundRun()
         }
@@ -117,6 +123,44 @@ final class FlightRecorder: ObservableObject {
         }
 
         recordTrackPoint(fix: fix, agl: snapshot.agl, speed: snapshot.speed)
+    }
+
+    /// Names the place an event happened.
+    ///
+    /// A dataset only ever covers some airfields; LKHN and every farm strip are
+    /// not in one. So an event somewhere unknown creates a learned airfield on
+    /// the spot, with the elevation measured on the ground if there is one. The
+    /// pilot renames it once and the logbook knows that field from then on.
+    private func resolveAirfield(for event: FlightEvent) -> Airport {
+        if let known = airports.nearest(to: event.coordinate) {
+            return known.airport
+        }
+        let measured = elevationProvider.groundReference.flatMap { reference -> Double? in
+            let d = GeoMath.distance(reference.coordinate, event.coordinate)
+            return d <= AirportDatabase.sameFieldRadius ? reference.meters : nil
+        }
+        return airports.learn(at: event.coordinate, elevation: measured ?? event.groundElevation)
+    }
+
+    /// Renames a learned airfield and relabels the flights already logged
+    /// against its old code, so a rename fixes history too.
+    func renameAirfield(id: String, code: String, name: String) {
+        guard let previous = airports.rename(id: id, code: code, name: name) else { return }
+        store.relabelAirport(from: previous, to: code)
+        if currentFlight?.takeoff.airport == previous {
+            currentFlight?.takeoff.airport = code
+        }
+    }
+
+    /// Records the aircraft's current position as a named airfield.
+    func addCurrentPositionAsAirfield(code: String, name: String) {
+        guard let fix = location.lastFix else { return }
+        let elevation = elevationProvider.groundReference.flatMap { reference -> Double? in
+            GeoMath.distance(reference.coordinate, fix.coordinate) <= AirportDatabase.sameFieldRadius
+                ? reference.meters
+                : nil
+        }
+        airports.add(code: code, name: name, coordinate: fix.coordinate, elevation: elevation)
     }
 
     /// The reference is recomputed on every stationary fix, but writing it to
@@ -132,7 +176,7 @@ final class FlightRecorder: ObservableObject {
 
     private func handle(_ event: FlightEvent) {
         var event = event
-        event.airport = airports.nearest(to: event.coordinate)?.airport.code
+        event.airport = resolveAirfield(for: event).code
         lastEvent = event
 
         switch event.kind {
@@ -293,7 +337,7 @@ final class FlightRecorder: ObservableObject {
 
     var cachedTiles: Int { elevationProvider.cachedTileCount }
     var groundReference: CombinedElevationProvider.GroundReference? { elevationProvider.groundReference }
-    var airportCount: Int { airports.airports.count }
+    var airportCount: Int { airports.airports.count + airports.learned.count }
     var nearestAirport: Airport? {
         guard let fix = location.lastFix else { return nil }
         return airports.nearest(to: fix.coordinate)?.airport

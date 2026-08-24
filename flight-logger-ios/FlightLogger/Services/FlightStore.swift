@@ -74,6 +74,24 @@ final class FlightStore: ObservableObject {
 
     var openFlight: Flight? { flights.first(where: { $0.isOpen }) }
 
+    /// Relabels every event that referenced an airfield's old code, so renaming
+    /// "Plocha 1" to "LKHN" fixes the flights already in the logbook rather than
+    /// leaving history stamped with a placeholder.
+    func relabelAirport(from previous: String, to code: String) {
+        var changed = false
+        for index in flights.indices {
+            if flights[index].takeoff.airport == previous {
+                flights[index].takeoff.airport = code
+                changed = true
+            }
+            if flights[index].landing?.airport == previous {
+                flights[index].landing?.airport = code
+                changed = true
+            }
+        }
+        if changed { save() }
+    }
+
     // MARK: - Tracks
 
     /// Appends track points to a flight's JSONL file.

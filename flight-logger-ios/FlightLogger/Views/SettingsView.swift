@@ -152,16 +152,20 @@ struct SettingsView: View {
                 Spacer()
                 Text("\(recorder.cachedTiles)").foregroundStyle(.secondary)
             }
-            HStack {
-                Text("Letišť v databázi")
-                Spacer()
-                Text("\(recorder.airportCount)").foregroundStyle(.secondary)
+            NavigationLink {
+                AirfieldsView(database: recorder.airports)
+            } label: {
+                HStack {
+                    Text("Plochy a letiště")
+                    Spacer()
+                    Text("\(recorder.airportCount)").foregroundStyle(.secondary)
+                }
             }
             Button("Importovat databázi letišť (JSON)") { showingAirportImporter = true }
         } header: {
             Text("Terén")
         } footer: {
-            Text("Pořadí zdrojů: reference naměřená na zemi → databáze letišť → cache → online. Ve vzduchu obvykle není signál, takže online je jen bonus, nikdy základ.")
+            Text("Pořadí zdrojů: reference naměřená na zemi → databáze ploch → cache → online. Ve vzduchu obvykle není signál, takže online je jen bonus, nikdy základ. Plochu, která v databázi není (LKHN, soukromá louka), si aplikace zapamatuje sama při prvním letu — stačí ji pak přejmenovat.")
         }
     }
 
