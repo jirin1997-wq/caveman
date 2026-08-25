@@ -188,6 +188,36 @@ final class ElevationTests: XCTestCase {
         XCTAssertEqual(db.elevation(at: Coordinate(latitude: 50.109, longitude: 15.00))?.meters, 420)
     }
 
+    // MARK: - Water
+
+    /// A lake is not a runway: lift off at one end, land at the other, and it
+    /// is still the same water aerodrome.
+    @MainActor
+    func testWaterAerodromeMatchesAcrossTheWholeLake() {
+        let db = AirportDatabase(airports: [])
+        let lake = Coordinate(latitude: 49.1, longitude: 14.7)
+        let water = db.add(code: "Lipno", name: "Lipno", coordinate: lake, elevation: 726, kind: .water)
+
+        // Four kilometres away, still the same lake.
+        let farEnd = GeoMath.offset(lake, north: 4_000, east: 0)
+        XCTAssertEqual(db.existingMatch(for: farEnd)?.id, water.id)
+        XCTAssertEqual(db.learn(at: farEnd).id, water.id)
+        XCTAssertEqual(db.learned.count, 1)
+    }
+
+    /// The same distance on land is a different field, and must not be folded
+    /// into the first one.
+    @MainActor
+    func testLandFieldFourKilometresAwayIsADifferentPlace() {
+        let db = AirportDatabase(airports: [])
+        let field = Coordinate(latitude: 49.1, longitude: 14.7)
+        let first = db.add(code: "LKAA", name: "První", coordinate: field, elevation: 400)
+
+        let second = db.learn(at: GeoMath.offset(field, north: 4_000, east: 0))
+        XCTAssertNotEqual(second.id, first.id)
+        XCTAssertEqual(db.learned.count, 2)
+    }
+
     // MARK: - Cache
 
     func testCacheRoundTripsWithinAGridSquare() {

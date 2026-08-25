@@ -100,3 +100,32 @@ struct DetectionProfile: Codable, Equatable, Sendable {
 
     static let `default` = pistonSingle
 }
+
+// MARK: - Terrain reference
+
+extension DetectionProfile {
+
+    /// Ground speed below which a fix may contribute to the terrain reference.
+    ///
+    /// Not "stopped". A floatplane never stops — it drifts and idles across the
+    /// water at a few knots from the moment the engine starts, and waiting for
+    /// zero would mean it never measures the surface it is sitting on. What
+    /// actually matters is that the aircraft is *on* the surface, and taxi
+    /// speed says that as well as zero does. Half the landing threshold stays
+    /// clear of any speed the aircraft could be airborne at.
+    var groundSampleSpeed: Double { max(2, landingSpeed * 0.5) }
+
+    /// Whether this fix may contribute to the terrain reference.
+    ///
+    /// Deliberately conservative — a poisoned reference feeds a wrong AGL into
+    /// every later decision, which is worse than having no reference at all.
+    func acceptsGroundSample(phase: FlightPhase, speed: Double, agl: Double?) -> Bool {
+        guard phase != .airborne, phase != .approach else { return false }
+        guard speed >= 0, speed <= groundSampleSpeed else { return false }
+        // Something already says we are well clear of the terrain, so we are not
+        // resting on it: a helicopter in a low hover, or a glider on a slow
+        // final. Neither may rewrite the reference.
+        if let agl, agl > airborneAGL { return false }
+        return true
+    }
+}

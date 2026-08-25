@@ -19,7 +19,7 @@ struct AirfieldsView: View {
         List {
             Section {
                 if database.learned.isEmpty {
-                    Text("Zatím žádné vlastní plochy. Vznikne sama, jakmile vzlétneš nebo přistaneš někde, co není v databázi — pak ji tady přejmenuješ.")
+                    Text("Zatím žádné vlastní plochy. Vznikne sama, jakmile vzlétneš nebo přistaneš někde, co není v databázi — pak ji tady přejmenuješ. Vodní plochu označ jako vodu, počítá se pak s tím, že se vzlétá na jednom konci jezera a přistává na druhém.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
@@ -68,14 +68,14 @@ struct AirfieldsView: View {
         .navigationTitle("Plochy")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { airfield in
-            AirfieldEditor(airfield: airfield) { code, name in
-                recorder.renameAirfield(id: airfield.id, code: code, name: name)
+            AirfieldEditor(airfield: airfield) { code, name, kind in
+                recorder.renameAirfield(id: airfield.id, code: code, name: name, kind: kind)
                 editing = nil
             }
         }
         .sheet(isPresented: $showingAdd) {
-            AirfieldEditor(airfield: nil) { code, name in
-                recorder.addCurrentPositionAsAirfield(code: code, name: name)
+            AirfieldEditor(airfield: nil) { code, name, kind in
+                recorder.addCurrentPositionAsAirfield(code: code, name: name, kind: kind)
                 showingAdd = false
             }
         }
@@ -87,6 +87,9 @@ struct AirfieldsView: View {
                 Text(airfield.code).font(.headline)
                 if airfield.isLearned {
                     Tag(text: "vlastní", color: .orange)
+                }
+                if airfield.surface == .water {
+                    Tag(text: "voda", color: .blue)
                 }
                 Spacer()
                 Text(airfield.elevation.map { "\(Int($0.rounded())) m" } ?? "výška neznámá")
@@ -103,11 +106,12 @@ struct AirfieldsView: View {
 private struct AirfieldEditor: View {
 
     var airfield: Airport?
-    var onSave: (String, String) -> Void
+    var onSave: (String, String, AirfieldKind) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var code: String = ""
     @State private var name: String = ""
+    @State private var kind: AirfieldKind = .land
 
     var body: some View {
         NavigationStack {
@@ -117,10 +121,15 @@ private struct AirfieldEditor: View {
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                     TextField("Název (např. Hodkovice)", text: $name)
+                    Picker("Povrch", selection: $kind) {
+                        ForEach(AirfieldKind.allCases, id: \.self) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
                 } footer: {
                     Text(airfield?.isLearned == false
                          ? "Plochy z databáze se upravovat nedají."
-                         : "Kód se použije v deníku. Přejmenování opraví i lety, které už jsou zapsané.")
+                         : "Kód se použije v deníku. Přejmenování opraví i lety, které už jsou zapsané. Vodní plocha se párují na 6 km místo 2 km — jezero je větší než dráha.")
                 }
             }
             .navigationTitle(airfield == nil ? "Nová plocha" : "Upravit plochu")
@@ -131,7 +140,11 @@ private struct AirfieldEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Uložit") {
-                        onSave(code.trimmingCharacters(in: .whitespaces), name.trimmingCharacters(in: .whitespaces))
+                        onSave(
+                            code.trimmingCharacters(in: .whitespaces),
+                            name.trimmingCharacters(in: .whitespaces),
+                            kind
+                        )
                         dismiss()
                     }
                     .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty || airfield?.isLearned == false)
@@ -140,6 +153,7 @@ private struct AirfieldEditor: View {
             .onAppear {
                 code = airfield?.code ?? ""
                 name = airfield?.name ?? ""
+                kind = airfield?.surface ?? .land
             }
         }
     }

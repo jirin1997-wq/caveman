@@ -100,10 +100,14 @@ final class FlightRecorder: ObservableObject {
         let events = detector.ingest(fix, elevation: sample)
         snapshot = detector.snapshot
 
-        // Terrain reference: only while the aircraft is demonstrably not
-        // flying, and only when nearly stopped. A hovering helicopter or a slow
-        // glider must never be mistaken for "parked" and poison the reference.
-        if detector.phase != .airborne, detector.phase != .approach, snapshot.speed >= 0, snapshot.speed < 2 {
+        // Terrain reference: while the aircraft is on the surface and moving no
+        // faster than taxi speed. See `acceptsGroundSample` for why "on the
+        // surface" is the test rather than "stopped".
+        if detector.profile.acceptsGroundSample(
+            phase: detector.phase,
+            speed: snapshot.speed,
+            agl: snapshot.agl
+        ) {
             elevationProvider.noteGroundSample(fix)
             persistGroundReferenceIfWorthwhile(now: fix.timestamp)
             // Parked at a strip the app learned but has no elevation for yet:
@@ -131,21 +135,26 @@ final class FlightRecorder: ObservableObject {
     /// not in one. So an event somewhere unknown creates a learned airfield on
     /// the spot, with the elevation measured on the ground if there is one. The
     /// pilot renames it once and the logbook knows that field from then on.
-    private func resolveAirfield(for event: FlightEvent) -> Airport {
+    private func resolveAirfield(for event: FlightEvent) -> Airport? {
         if let known = airports.nearest(to: event.coordinate) {
             return known.airport
         }
-        let measured = elevationProvider.groundReference.flatMap { reference -> Double? in
-            let d = GeoMath.distance(reference.coordinate, event.coordinate)
-            return d <= AirportDatabase.sameFieldRadius ? reference.meters : nil
-        }
-        return airports.learn(at: event.coordinate, elevation: measured ?? event.groundElevation)
+        guard settings.learnAirfields else { return nil }
+        return airports.learn(at: event.coordinate, elevation: measuredElevation(near: event.coordinate) ?? event.groundElevation)
+    }
+
+    /// The ground reference, but only if it was taken close enough to this
+    /// coordinate to describe the same patch of surface.
+    private func measuredElevation(near coordinate: Coordinate) -> Double? {
+        guard let reference = elevationProvider.groundReference else { return nil }
+        let d = GeoMath.distance(reference.coordinate, coordinate)
+        return d <= elevationProvider.nearFieldRadius ? reference.meters : nil
     }
 
     /// Renames a learned airfield and relabels the flights already logged
     /// against its old code, so a rename fixes history too.
-    func renameAirfield(id: String, code: String, name: String) {
-        guard let previous = airports.rename(id: id, code: code, name: name) else { return }
+    func renameAirfield(id: String, code: String, name: String, kind: AirfieldKind) {
+        guard let previous = airports.rename(id: id, code: code, name: name, kind: kind) else { return }
         store.relabelAirport(from: previous, to: code)
         if currentFlight?.takeoff.airport == previous {
             currentFlight?.takeoff.airport = code
@@ -153,14 +162,15 @@ final class FlightRecorder: ObservableObject {
     }
 
     /// Records the aircraft's current position as a named airfield.
-    func addCurrentPositionAsAirfield(code: String, name: String) {
+    func addCurrentPositionAsAirfield(code: String, name: String, kind: AirfieldKind) {
         guard let fix = location.lastFix else { return }
-        let elevation = elevationProvider.groundReference.flatMap { reference -> Double? in
-            GeoMath.distance(reference.coordinate, fix.coordinate) <= AirportDatabase.sameFieldRadius
-                ? reference.meters
-                : nil
-        }
-        airports.add(code: code, name: name, coordinate: fix.coordinate, elevation: elevation)
+        airports.add(
+            code: code,
+            name: name,
+            coordinate: fix.coordinate,
+            elevation: measuredElevation(near: fix.coordinate),
+            kind: kind
+        )
     }
 
     /// The reference is recomputed on every stationary fix, but writing it to
@@ -176,7 +186,7 @@ final class FlightRecorder: ObservableObject {
 
     private func handle(_ event: FlightEvent) {
         var event = event
-        event.airport = resolveAirfield(for: event).code
+        event.airport = resolveAirfield(for: event)?.code
         lastEvent = event
 
         switch event.kind {

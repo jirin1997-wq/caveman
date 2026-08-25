@@ -161,11 +161,12 @@ struct SettingsView: View {
                     Text("\(recorder.airportCount)").foregroundStyle(.secondary)
                 }
             }
+            Toggle("Zakládat plochy automaticky", isOn: $settings.learnAirfields)
             Button("Importovat databázi letišť (JSON)") { showingAirportImporter = true }
         } header: {
             Text("Terén")
         } footer: {
-            Text("Pořadí zdrojů: reference naměřená na zemi → databáze ploch → cache → online. Ve vzduchu obvykle není signál, takže online je jen bonus, nikdy základ. Plochu, která v databázi není (LKHN, soukromá louka), si aplikace zapamatuje sama při prvním letu — stačí ji pak přejmenovat.")
+            Text("Pořadí zdrojů: reference naměřená na zemi → databáze ploch → cache → online. Ve vzduchu obvykle není signál, takže online je jen bonus, nikdy základ. Plochu, která v databázi není (LKHN, Záhoří, jezero, soukromá louka), si aplikace zapamatuje sama při prvním letu — stačí ji pak přejmenovat. Když zakládání vypneš, neznámá místa zůstanou v deníku jako souřadnice.")
         }
     }
 

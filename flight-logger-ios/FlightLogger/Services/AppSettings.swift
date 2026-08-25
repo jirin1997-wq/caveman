@@ -9,6 +9,7 @@ final class AppSettings: ObservableObject {
         var aircraft: String
         var useOnlineElevation: Bool
         var keepScreenAwake: Bool
+        var learnAirfields: Bool?
         var groundReference: CombinedElevationProvider.GroundReference?
     }
 
@@ -22,6 +23,9 @@ final class AppSettings: ObservableObject {
     /// Keeps the screen on while recording. Handy on a kneeboard, brutal on the
     /// battery — the pilot chooses.
     @Published var keepScreenAwake: Bool { didSet { persist() } }
+    /// Whether a takeoff or landing somewhere unknown creates an airfield.
+    /// Off means unknown places stay as coordinates in the logbook.
+    @Published var learnAirfields: Bool { didSet { persist() } }
 
     /// Survives an app restart so a mid-flight relaunch does not lose the field
     /// elevation the app measured before departure.
@@ -42,6 +46,7 @@ final class AppSettings: ObservableObject {
         aircraft = stored?.aircraft ?? ""
         useOnlineElevation = stored?.useOnlineElevation ?? true
         keepScreenAwake = stored?.keepScreenAwake ?? true
+        learnAirfields = stored?.learnAirfields ?? true
         groundReference = stored?.groundReference
         loaded = true
     }
@@ -55,6 +60,7 @@ final class AppSettings: ObservableObject {
             aircraft: aircraft,
             useOnlineElevation: useOnlineElevation,
             keepScreenAwake: keepScreenAwake,
+            learnAirfields: learnAirfields,
             groundReference: groundReference
         )
         guard let data = try? encoder.encode(stored) else { return }

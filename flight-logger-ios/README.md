@@ -16,7 +16,8 @@ odlet. Musí platit obojí najednou.
 |---|---|
 | **Automatická detekce** | Vzlet a přistání se zapíšou samy, včetně touch & go |
 | **Výška nad terénem (AGL)** | Ze čtyř zdrojů, seřazených tak, aby to fungovalo bez signálu |
-| **Učí se plochy** | Letiště, které v databázi není (LKHN, soukromá louka), si zapamatuje samo |
+| **Učí se plochy** | Letiště, které v databázi není (LKHN, Záhoří, louka), si zapamatuje samo |
+| **Voda** | Vodní plochy, hydroplány — reference se sbírá i za pojíždění po hladině |
 | **Deník** | Doba letu, odlet/přílet, max. výška, uletěná vzdálenost, nalétané hodiny |
 | **Trasa** | Celý let bod po bodu, na mapě, export do GPX |
 | **Export** | GPX na let, CSV na celý deník |
@@ -102,11 +103,22 @@ za to, aby se chytily touch & go. Smaže se v deníku swipem.
 
 ## Plochy, které v žádné databázi nejsou
 
-LKHN, travnatá plocha za vsí, louka souseda. Žádný veřejný dataset je nepokrývá
-všechny a vypisovat je po paměti nemá cenu — špatná souřadnice nebo špatná
-elevace je horší než žádná.
+LKHN, Záhoří, travnatá plocha za vsí, louka souseda. Žádný veřejný dataset je
+nepokrývá všechny a vypisovat je po paměti nemá cenu — špatná souřadnice nebo
+špatná elevace je horší než žádná.
 
-Aplikace to řeší tak, že se je **učí za letu**:
+**Proč se vůbec zakládá „plocha“, a ne jen souřadnice?** Ze dvou důvodů, oba
+praktické:
+
+- **Deník.** `LKHN → LKZR` se čte, `50.7241, 15.0847 → 49.3012, 14.1877` ne.
+- **Výška terénu offline.** Souřadnice si nic nepamatují. Plocha ano: jednou
+  naměřená nadmořská výška u ní zůstane napořád, takže při příštím příletu má
+  aplikace AGL hned, bez signálu a bez čekání, až letadlo chvíli postojí.
+
+Nechceš to? **Nastavení → Terén → Zakládat plochy automaticky** vypni a neznámá
+místa zůstanou v deníku jako souřadnice.
+
+Jinak se aplikace plochy **učí za letu**:
 
 1. Přistaneš někde, co nezná → založí si plochu `Plocha 1` na tom místě.
 2. Než odletíš, chvíli stojíš se zapnutým záznamem → naměří si nadmořskou výšku
@@ -123,6 +135,38 @@ zapíše plochu hned, i s naměřenou výškou, pokud už nějakou má.
 Vlastní plochy mají přednost před datasetem, když jsou blíž. Naměřená výška
 naopak **nikdy nepřepíše** publikovanou elevaci z datasetu — ruční GPS na to
 není.
+
+---
+
+## Voda
+
+Hydroplán, plovákový ultralight, vzlet z jezera nebo z moře. Funguje, ale dvě
+věci jsou jinak než na trávě a obě jsou v kódu ošéfované:
+
+**Hydroplán se nikdy nezastaví.** Na vodě pořád driftuješ a pojíždíš, klidně
+5 kt od nastartování až po odlepení. Původní pravidlo sbíralo referenci terénu
+jen pod 4 kt — na vodě by tedy nevznikla **nikdy**. Teď je práh odvozený od
+typu letadla (polovina přistávací rychlosti, u motorového cca 16 kt) a rozhoduje
+„jsem na hladině“, ne „stojím“. Navíc se vzorek zahodí, když už nějaký zdroj
+tvrdí, že jsi vysoko — vrtulník ve visu referenci nepřepíše.
+
+**Jezero není dráha.** Vzlétneš na jednom konci, přistaneš na druhém, a je to
+pořád stejné vodní letiště. Plochu proto můžeš označit jako **vodní** a pak se
+páruje na 6 km místo 2 km. Bez toho by z jednoho jezera byly tři plochy.
+
+Co se výšky týče:
+
+- **Moře** — terén je 0 m n. m., takže AGL vyjde rovno nadmořské výšce. Přesně
+  jak má.
+- **Jezero nebo přehrada** — hladina je výš než moře a výškové modely ji občas
+  vracejí jako nulu. Proto je reference naměřená na hladině a uložená u té
+  plochy důležitější než online dotaz: má před ním přednost. První let z nové
+  vodní plochy může být proto pár sekund nepřesný (než se reference ustaví),
+  každý další už ne.
+- **Kolísání hladiny** — přehrada se v roce hne o metry, práh je 18 m. Nevadí.
+
+Detekce samotná je na vodě stejná: rozjezd na step při 30–40 kt je pro aplikaci
+totéž co rychlé pojíždění a **nezapíše se**, dokud se stroj neodlepí od hladiny.
 
 ---
 
@@ -227,6 +271,8 @@ Poctivě, protože to není jedno:
 
 **Ověřené:**
 
+- Pravidlo pro sběr reference terénu (pojíždění ano, let ne, vis vrtulníku ne,
+  drift hydroplánu ano) a párování vodních ploch přes celé jezero.
 - Logika detekce na 11 scénářích — standardní let, letiště ve 2000 m, bez dat o
   terénu, touch & go, rychlé pojíždění, start za letu, rozbité fixy, desetiminutový
   výpadek signálu, přijímač bez údaje o rychlosti, kluzák se správným i se

@@ -1,5 +1,27 @@
 import Foundation
 
+/// What kind of surface a place is. Only matters for learned entries, and only
+/// for two things: how far apart two fixes can be and still be the same place,
+/// and what the logbook calls it.
+enum AirfieldKind: String, Codable, Sendable, CaseIterable {
+    case land
+    case water
+
+    var label: String {
+        switch self {
+        case .land: return "Plocha / letiště"
+        case .water: return "Vodní plocha"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .land: return "plocha"
+        case .water: return "voda"
+        }
+    }
+}
+
 struct Airport: Codable, Equatable, Sendable, Identifiable {
     /// ICAO code where one exists, otherwise the local identifier. For a
     /// learned airfield this is whatever the pilot typed — "LKHN".
@@ -17,6 +39,9 @@ struct Airport: Codable, Equatable, Sendable, Identifiable {
     /// True for airfields the app learned or the pilot added by hand. These are
     /// the only ones it may edit or overwrite.
     var learned: Bool?
+    /// Land or water. Absent means land — the overwhelming majority, and what
+    /// every dataset row is.
+    var kind: AirfieldKind?
 
     init(
         code: String,
@@ -25,7 +50,8 @@ struct Airport: Codable, Equatable, Sendable, Identifiable {
         longitude: Double,
         elevation: Double? = nil,
         uid: String? = nil,
-        learned: Bool? = nil
+        learned: Bool? = nil,
+        kind: AirfieldKind? = nil
     ) {
         self.code = code
         self.name = name
@@ -34,11 +60,25 @@ struct Airport: Codable, Equatable, Sendable, Identifiable {
         self.elevation = elevation
         self.uid = uid
         self.learned = learned
+        self.kind = kind
     }
 
     var id: String { uid ?? code }
     var coordinate: Coordinate { Coordinate(latitude: latitude, longitude: longitude) }
     var isLearned: Bool { learned == true }
+    var surface: AirfieldKind { kind ?? .land }
+
+    /// How far from this place a fix can be and still count as the same place.
+    ///
+    /// A runway is a couple of kilometres end to end. A lake is not: a
+    /// floatplane can lift off at one end and land at the other, and those are
+    /// the same water aerodrome, not two.
+    var matchRadius: Double {
+        switch surface {
+        case .land: return 2_000
+        case .water: return 6_000
+        }
+    }
 }
 
 /// Offline airfield lookup, in two layers.
@@ -62,11 +102,6 @@ final class AirportDatabase: ObservableObject {
     static let userDatabaseFilename = "airports.json"
     static let learnedFilename = "learned-airfields.json"
 
-    /// A learned airfield is the same place as an existing one if it is this
-    /// close. Big enough to cover taxiing between both ends of a runway, small
-    /// enough not to swallow the next field over.
-    static let sameFieldRadius: Double = 2_000
-
     @Published private(set) var airports: [Airport] = []
     @Published private(set) var learned: [Airport] = []
 
@@ -82,6 +117,7 @@ final class AirportDatabase: ObservableObject {
         self.learnedURL = learnedURL
         load(airports)
         self.learned = learned
+        self.kind = kind
     }
 
     /// Bundled seed (or a user import), plus whatever the app has learned.
@@ -169,19 +205,33 @@ final class AirportDatabase: ObservableObject {
         (Int(floor(lat)) + 90) * 360 + (Int(floor(lon)) + 180)
     }
 
+    /// The place this coordinate belongs to, if the app already knows one.
+    ///
+    /// Each candidate is judged by its own radius, so a lake keeps its six
+    /// kilometres while the airfield beside it keeps its two.
+    func existingMatch(for coordinate: Coordinate) -> Airport? {
+        var best: (airport: Airport, distance: Double)?
+        for candidate in learned + candidates(around: coordinate) {
+            let d = GeoMath.distance(coordinate, candidate.coordinate)
+            guard d <= candidate.matchRadius else { continue }
+            if best == nil || d < best!.distance { best = (candidate, d) }
+        }
+        return best?.airport
+    }
+
     // MARK: - Learning
 
     /// Records a place a flight started or ended.
     ///
-    /// Returns the existing airfield if one is already within
-    /// `sameFieldRadius` — a takeoff and the landing that follows it at the same
-    /// strip must not produce two entries. Otherwise creates one named
-    /// "Plocha N" for the pilot to rename.
+    /// Returns the existing airfield when one is already in range — a takeoff
+    /// and the landing that follows it at the same strip must not produce two
+    /// entries, and each place is judged by its own `matchRadius`. Otherwise
+    /// creates one named "Plocha N" for the pilot to rename.
     @discardableResult
     func learn(at coordinate: Coordinate, elevation: Double? = nil) -> Airport {
-        if let existing = nearest(to: coordinate, within: Self.sameFieldRadius) {
-            if let elevation { setElevation(elevation, for: existing.airport.id) }
-            return current(existing.airport.id) ?? existing.airport
+        if let existing = existingMatch(for: coordinate) {
+            if let elevation { setElevation(elevation, for: existing.id) }
+            return current(existing.id) ?? existing
         }
         let airfield = Airport(
             code: nextPlaceholderCode(),
@@ -199,7 +249,13 @@ final class AirportDatabase: ObservableObject {
 
     /// Adds an airfield the pilot typed in by hand.
     @discardableResult
-    func add(code: String, name: String, coordinate: Coordinate, elevation: Double?) -> Airport {
+    func add(
+        code: String,
+        name: String,
+        coordinate: Coordinate,
+        elevation: Double?,
+        kind: AirfieldKind = .land
+    ) -> Airport {
         let airfield = Airport(
             code: code,
             name: name,
@@ -207,7 +263,8 @@ final class AirportDatabase: ObservableObject {
             longitude: coordinate.longitude,
             elevation: elevation,
             uid: UUID().uuidString,
-            learned: true
+            learned: true,
+            kind: kind
         )
         learned.append(airfield)
         saveLearned()
@@ -217,11 +274,12 @@ final class AirportDatabase: ObservableObject {
     /// Renames a learned airfield. Returns the code it used to have, so the
     /// logbook can relabel the flights that already reference it.
     @discardableResult
-    func rename(id: String, code: String, name: String) -> String? {
+    func rename(id: String, code: String, name: String, kind: AirfieldKind? = nil) -> String? {
         guard let index = learned.firstIndex(where: { $0.id == id }) else { return nil }
         let previous = learned[index].code
         learned[index].code = code
         learned[index].name = name
+        if let kind { learned[index].kind = kind }
         saveLearned()
         return previous == code ? nil : previous
     }
@@ -242,9 +300,9 @@ final class AirportDatabase: ObservableObject {
     /// Called while the aircraft sits still: if it is parked at a learned
     /// airfield that has no elevation yet, this is the moment to record one.
     func noteMeasuredElevation(_ meters: Double, at coordinate: Coordinate) {
-        guard let match = nearest(to: coordinate, within: Self.sameFieldRadius) else { return }
-        guard match.airport.isLearned, match.airport.elevation == nil else { return }
-        setElevation(meters, for: match.airport.id)
+        guard let match = existingMatch(for: coordinate) else { return }
+        guard match.isLearned, match.elevation == nil else { return }
+        setElevation(meters, for: match.id)
     }
 
     func forget(id: String) {
