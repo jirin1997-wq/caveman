@@ -233,3 +233,17 @@ describe('plausiblePrice', () => {
     assert.equal(listing, null);
   });
 });
+
+describe('pricePerM2 jako kontrola souladu', () => {
+  test('nesoulad ceny a plochy se do mediánů nedostane', () => {
+    // 104 mil. na 18 m² projde pojistkou na cenu i na plochu zvlášť,
+    // dohromady je to ale 5,8 mil. Kč/m² — jedno z těch čísel je špatně.
+    assert.equal(pricePerM2(104_200_000, 18), null);
+    assert.equal(pricePerM2(500_000, 60), null); // 8 333 Kč/m² — pod dolní mezí
+  });
+
+  test('běžné pásmo projde', () => {
+    assert.equal(pricePerM2(9_000_000, 60), 150_000);
+    assert.equal(pricePerM2(3_000_000, 60), 50_000);
+  });
+});

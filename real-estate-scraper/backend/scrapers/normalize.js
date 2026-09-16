@@ -134,10 +134,18 @@ export function plausiblePrice(value) {
   return Number.isFinite(value) && value >= 200_000 && value <= 500_000_000 ? value : null;
 }
 
-/** Cena za m² — počítá se, nikdy se nepřebírá ze zdroje. */
+/**
+ * Cena za m² — počítá se, nikdy se nepřebírá ze zdroje.
+ *
+ * Výsledek mimo rozumné pásmo znamená, že je špatně cena nebo plocha,
+ * jen nevíme která: byt za 104 mil. na 18 m² projde oběma pojistkami
+ * zvlášť, ale dohromady dávají 5,8 mil. Kč/m². Takový záznam se do
+ * mediánů nesmí dostat, i když jinak vypadá v pořádku.
+ */
 export function pricePerM2(price, sizeM2) {
   if (!price || !sizeM2) return null;
-  return Math.round(price / sizeM2);
+  const value = Math.round(price / sizeM2);
+  return value >= 10_000 && value <= 600_000 ? value : null;
 }
 
 /**
