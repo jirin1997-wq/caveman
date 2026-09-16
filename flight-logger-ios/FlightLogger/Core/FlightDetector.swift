@@ -360,9 +360,24 @@ final class FlightDetector {
         if phase == .airborne, groundedSince != nil { display = .approach }
         if phase == .unknown, airborneSince == nil { display = .unknown }
 
+        // Only a candidate that could actually change the state counts. In
+        // cruise `airborneSince` is re-armed on every fix — it is simply still
+        // true that the aircraft is flying — and reporting that as pending
+        // would leave the live screen claiming to be verifying a change for the
+        // whole flight.
+        let pending: Date?
+        switch phase {
+        case .unknown:
+            pending = airborneSince ?? groundedSince
+        case .onGround, .takeoffRoll:
+            pending = airborneSince
+        case .airborne, .approach:
+            pending = groundedSince ?? touchSince
+        }
+
         var progress = 0.0
-        if let since = airborneSince ?? groundedSince {
-            progress = min(1, s.fix.timestamp.timeIntervalSince(since) / profile.confirmDuration)
+        if let pending {
+            progress = min(1, s.fix.timestamp.timeIntervalSince(pending) / profile.confirmDuration)
         }
 
         snapshot = DetectorSnapshot(
