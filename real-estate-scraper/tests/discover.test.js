@@ -1,7 +1,15 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import * as cheerio from 'cheerio';
-import { priceContainers, apiHints, listingLinks, pageOutline } from '../backend/scrapers/discover.js';
+import {
+  priceContainers,
+  apiHints,
+  listingLinks,
+  pageOutline,
+  paramPairs,
+  geoHints,
+  jsonLdBlocks
+} from '../backend/scrapers/discover.js';
 
 const page = `<!doctype html><html><head><title>Výpis</title></head><body>
   <script>fetch("/api/v3/estates?page=1"); var g = "https://api.example.cz/graphql";</script>
@@ -112,5 +120,63 @@ describe('pageOutline', () => {
     const empty = pageOutline(cheerio.load('<html></html>'));
     assert.deepEqual(empty.headings, []);
     assert.deepEqual(empty.fields, []);
+  });
+});
+
+describe('čtení detailní stránky', () => {
+  const detail = `<html><body>
+    <script type="application/ld+json">
+      {"@type":"Residence","name":"Byt 2+kk","geo":{"latitude":50.06,"longitude":14.46},"offers":{"price":6400000}}
+    </script>
+    <script>var map = {"latitude": 50.0755, "longitude": 14.4378};</script>
+    <dl>
+      <dt>Stavba</dt><dd>Cihlová</dd>
+      <dt>Stav objektu</dt><dd>Velmi dobrý</dd>
+      <dt>Prázdná</dt><dd></dd>
+    </dl>
+    <table>
+      <tr><th>Podlaží</th><td>3. podlaží z 5</td></tr>
+      <tr><th>Výtah</th><td>Ano</td></tr>
+      <tr><td>tři</td><td>sloupce</td><td>navíc</td></tr>
+    </table>
+    <div data-lat="49.1951" data-lng="16.6068"></div>
+  </body></html>`;
+
+  const $ = cheerio.load(detail);
+
+  test('vytáhne parametry z <dl> i z tabulky', () => {
+    const pairs = paramPairs($);
+    assert.ok(pairs.includes('Stavba: Cihlová'));
+    assert.ok(pairs.includes('Stav objektu: Velmi dobrý'));
+    assert.ok(pairs.includes('Podlaží: 3. podlaží z 5'));
+    assert.ok(pairs.includes('Výtah: Ano'));
+  });
+
+  test('dvojice bez hodnoty a řádky s jiným počtem sloupců se vynechají', () => {
+    const pairs = paramPairs($);
+    assert.ok(!pairs.some((p) => p.startsWith('Prázdná')));
+    assert.ok(!pairs.some((p) => p.includes('sloupce')));
+  });
+
+  test('najde souřadnice v JSONu i v data- atributech', () => {
+    const geo = geoHints(detail);
+    assert.ok(geo.includes('latitude=50.0755'));
+    assert.ok(geo.includes('lat=49.1951'));
+  });
+
+  test('celé číslo se za souřadnici nepovažuje', () => {
+    assert.deepEqual(geoHints('{"latitude": 50}'), []);
+  });
+
+  test('vypíše typy a klíče strukturovaných dat', () => {
+    const blocks = jsonLdBlocks($);
+    assert.equal(blocks.length, 1);
+    assert.match(blocks[0], /^Residence → /);
+    assert.match(blocks[0], /geo/);
+  });
+
+  test('rozbitý JSON-LD nespadne, jen se ohlásí', () => {
+    const broken = cheerio.load('<script type="application/ld+json">{tohle není json</script>');
+    assert.match(jsonLdBlocks(broken)[0], /nepodařilo/);
   });
 });

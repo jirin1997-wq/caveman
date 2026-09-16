@@ -215,6 +215,70 @@ export function pageOutline($) {
 
 const unnbspText = (text) => String(text || '').replace(/[  ]/g, ' ');
 
+const tidy = (text) => unnbspText(text).replace(/\s+/g, ' ').trim();
+
+/**
+ * Dvojice „název: hodnota" z tabulky parametrů.
+ *
+ * Právě tady bývá to, co ve výpisu chybí — vybavenost, typ stavby, stav,
+ * patro, rok dokončení. Weby to sázejí buď do <dl>, nebo do dvousloupcové
+ * tabulky, takže se hledá obojí.
+ */
+export function paramPairs($) {
+  const pairs = new Set();
+
+  $('dl').each((_, dl) => {
+    const terms = $(dl).find('dt');
+    const values = $(dl).find('dd');
+    terms.each((i, dt) => {
+      const key = tidy($(dt).text());
+      const value = tidy($(values[i]).text());
+      if (key && value && value.length < 120) pairs.add(`${key}: ${value}`);
+    });
+  });
+
+  $('tr').each((_, tr) => {
+    const cells = $(tr).find('th, td');
+    if (cells.length !== 2) return;
+    const key = tidy($(cells[0]).text());
+    const value = tidy($(cells[1]).text());
+    if (key && value && value.length < 120) pairs.add(`${key}: ${value}`);
+  });
+
+  return [...pairs].slice(0, 60);
+}
+
+/** Souřadnice schované ve zdroji stránky — bez nich nejde vykreslit mapa. */
+export function geoHints(html) {
+  const found = new Set();
+  const patterns = [
+    /"(lat|latitude|lng|lon|longitude)"\s*:\s*"?(-?\d{1,3}\.\d{3,})/gi,
+    /data-(lat|lng|lon|latitude|longitude)="(-?\d{1,3}\.\d{3,})"/gi
+  ];
+  for (const pattern of patterns) {
+    for (const m of html.matchAll(pattern)) found.add(`${m[1].toLowerCase()}=${m[2]}`);
+  }
+  return [...found].slice(0, 12);
+}
+
+/** Strukturovaná data schema.org — nejspolehlivější zdroj, když je web má. */
+export function jsonLdBlocks($) {
+  const blocks = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const parsed = JSON.parse($(el).text());
+      for (const node of [].concat(parsed['@graph'] || parsed)) {
+        if (node && typeof node === 'object') {
+          blocks.push(`${node['@type'] || '?'} → ${Object.keys(node).join(', ')}`);
+        }
+      }
+    } catch {
+      blocks.push('(blok se nepodařilo přečíst jako JSON)');
+    }
+  });
+  return blocks.slice(0, 10);
+}
+
 /** Obhlídka jedné stránky — co na ní je, ne kde na ní jsou inzeráty. */
 async function outline(url) {
   console.log(`\n${'='.repeat(70)}\n${C.b('Obhlídka')}  ${C.dim(url)}`);
@@ -239,7 +303,10 @@ async function outline(url) {
     ['nadpisy', parts.headings],
     ['navigace', parts.nav],
     ['pole formulářů', parts.fields],
-    ['tlačítka', parts.buttons]
+    ['tlačítka', parts.buttons],
+    ['parametry nemovitosti', paramPairs($)],
+    ['souřadnice ve zdroji', geoHints(html)],
+    ['strukturovaná data (JSON-LD)', jsonLdBlocks($)]
   ]) {
     if (!items.length) continue;
     console.log(`\n  ${C.b(label)}:`);
