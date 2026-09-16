@@ -172,7 +172,103 @@ async function inspect({ key, url }) {
   }
 }
 
+/**
+ * Popis stránky, ze kterého jde poznat, co web umí — nadpisy, navigace,
+ * ovládací prvky formulářů.
+ *
+ * Vzniklo kvůli obhlídce konkurence: z vývojového prostředí se ven
+ * nedostaneme, ale runner CI ano, takže se tam pošle dotaz a struktura
+ * přijde zpátky v logu.
+ */
+export function pageOutline($) {
+  const list = (sel, limit, fn) => {
+    const seen = new Set();
+    $(sel).each((_, el) => {
+      const value = fn($(el), el);
+      if (value && !seen.has(value)) seen.add(value);
+    });
+    return [...seen].slice(0, limit);
+  };
+
+  const clean = (t) => unnbspText(t).replace(/\s+/g, ' ').trim();
+
+  return {
+    headings: list('h1, h2, h3', 40, (n, el) => {
+      const text = clean(n.text());
+      return text && text.length < 120 ? `${el.tagName} ${text}` : null;
+    }),
+    nav: list('nav a, header a', 30, (n) => {
+      const text = clean(n.text());
+      return text && text.length < 60 ? `${text} → ${n.attr('href')}` : null;
+    }),
+    fields: list('input, select, textarea', 40, (n, el) => {
+      const type = n.attr('type') || el.tagName;
+      const name = n.attr('name') || n.attr('id') || n.attr('placeholder') || n.attr('aria-label');
+      return name ? `${type}: ${name}` : null;
+    }),
+    buttons: list('button, [role="button"], .btn', 25, (n) => {
+      const text = clean(n.text());
+      return text && text.length < 50 ? text : null;
+    })
+  };
+}
+
+const unnbspText = (text) => String(text || '').replace(/[  ]/g, ' ');
+
+/** Obhlídka jedné stránky — co na ní je, ne kde na ní jsou inzeráty. */
+async function outline(url) {
+  console.log(`\n${'='.repeat(70)}\n${C.b('Obhlídka')}  ${C.dim(url)}`);
+
+  const res = await axios.get(url, {
+    headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' },
+    timeout: TIMEOUT,
+    maxRedirects: 5,
+    validateStatus: () => true
+  });
+
+  const html = String(res.data);
+  const $ = cheerio.load(html);
+  const mark = res.status < 400 ? C.ok(res.status) : C.bad(res.status);
+
+  console.log(`  HTTP ${mark}   ${html.length} B   „${$('title').text().trim().slice(0, 90)}"`);
+  const description = $('meta[name="description"]').attr('content');
+  if (description) console.log(`  popis: ${description.slice(0, 200)}`);
+
+  const parts = pageOutline($);
+  for (const [label, items] of [
+    ['nadpisy', parts.headings],
+    ['navigace', parts.nav],
+    ['pole formulářů', parts.fields],
+    ['tlačítka', parts.buttons]
+  ]) {
+    if (!items.length) continue;
+    console.log(`\n  ${C.b(label)}:`);
+    for (const item of items) console.log(`    ${item}`);
+  }
+
+  const api = apiHints(html);
+  if (api.length) {
+    console.log(`\n  ${C.b('API cesty ve zdroji')}:`);
+    for (const a of api) console.log(`    ${a}`);
+  }
+}
+
 export async function discoverAll() {
+  // S adresou na příkazové řádce udělá obhlídku té stránky,
+  // bez ní projde zdroje inzerátů.
+  const urls = process.argv.slice(2).filter((a) => a.startsWith('http'));
+  if (urls.length) {
+    for (const url of urls) {
+      try {
+        await outline(url);
+      } catch (err) {
+        console.log(`  ${C.bad('obhlídka spadla')}: ${err.code || err.message}`);
+      }
+    }
+    console.log(`\n${'='.repeat(70)}\n`);
+    return;
+  }
+
   console.log(C.b('\nPrůzkum zdrojů — kde na webu skutečně jsou inzeráty\n'));
   for (const target of TARGETS) {
     try {

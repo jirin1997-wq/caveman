@@ -9,6 +9,11 @@ name: Průzkum zdrojů
 
 on:
   workflow_dispatch:
+    inputs:
+      url:
+        description: 'Adresa k obhlídce (prázdné = projít zdroje inzerátů)'
+        required: false
+        default: ''
 
 defaults:
   run:
@@ -30,5 +35,9 @@ jobs:
 
       - run: npm ci --omit=dev --no-audit --no-fund
 
+      # Vstup jde přes proměnnou prostředí a v uvozovkách — vložený rovnou
+      # do příkazu by z něj šlo spustit cokoliv dalšího.
       - name: Průzkum
-        run: npm run discover
+        env:
+          TARGET_URL: ${{ inputs.url }}
+        run: npm run discover -- "$TARGET_URL"

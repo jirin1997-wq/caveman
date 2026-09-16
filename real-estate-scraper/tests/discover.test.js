@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import * as cheerio from 'cheerio';
-import { priceContainers, apiHints, listingLinks } from '../backend/scrapers/discover.js';
+import { priceContainers, apiHints, listingLinks, pageOutline } from '../backend/scrapers/discover.js';
 
 const page = `<!doctype html><html><head><title>Výpis</title></head><body>
   <script>fetch("/api/v3/estates?page=1"); var g = "https://api.example.cz/graphql";</script>
@@ -71,5 +71,46 @@ describe('listingLinks', () => {
   test('nesouvisející odkazy a kotvy vynechá', () => {
     assert.ok(!links.some((l) => l.includes('o-nas')));
     assert.ok(!links.some((l) => l.includes('#')));
+  });
+});
+
+describe('pageOutline', () => {
+  const site = `<html><head><title>Kalkulačka</title></head><body>
+    <nav><a href="/hypoteka">Hypotéka</a><a href="/refinancovani">Refinancování</a></nav>
+    <h1>Spočítej si splátku</h1>
+    <h2>Parametry úvěru</h2>
+    <form>
+      <input type="number" name="kupniCena" placeholder="Kupní cena">
+      <input type="number" name="vlastniZdroje">
+      <select name="fixace"><option>3 roky</option></select>
+      <textarea id="poznamka"></textarea>
+    </form>
+    <button>Spočítat</button><button>Spočítat</button>
+  </body></html>`;
+
+  const parts = pageOutline(cheerio.load(site));
+
+  test('vypíše nadpisy i s úrovní', () => {
+    assert.deepEqual(parts.headings, ['h1 Spočítej si splátku', 'h2 Parametry úvěru']);
+  });
+
+  test('vypíše navigaci i s cílem odkazu', () => {
+    assert.ok(parts.nav.some((n) => n.includes('Hypotéka → /hypoteka')));
+  });
+
+  test('vypíše vstupní pole — z nich je poznat, s čím kalkulačka počítá', () => {
+    assert.ok(parts.fields.includes('number: kupniCena'));
+    assert.ok(parts.fields.includes('select: fixace'));
+    assert.ok(parts.fields.includes('textarea: poznamka'));
+  });
+
+  test('stejné tlačítko dvakrát se vypíše jednou', () => {
+    assert.deepEqual(parts.buttons, ['Spočítat']);
+  });
+
+  test('prázdná stránka nespadne', () => {
+    const empty = pageOutline(cheerio.load('<html></html>'));
+    assert.deepEqual(empty.headings, []);
+    assert.deepEqual(empty.fields, []);
   });
 });
