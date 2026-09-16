@@ -8,7 +8,8 @@ import {
   pageOutline,
   paramPairs,
   geoHints,
-  jsonLdBlocks
+  jsonLdBlocks,
+  colonPairs
 } from '../backend/scrapers/discover.js';
 
 const page = `<!doctype html><html><head><title>Výpis</title></head><body>
@@ -178,5 +179,31 @@ describe('čtení detailní stránky', () => {
   test('rozbitý JSON-LD nespadne, jen se ohlásí', () => {
     const broken = cheerio.load('<script type="application/ld+json">{tohle není json</script>');
     assert.match(jsonLdBlocks(broken)[0], /nepodařilo/);
+  });
+});
+
+describe('colonPairs — náhradní čtení parametrů', () => {
+  test('najde dvojice i mimo <dl> a tabulku', () => {
+    const $ = cheerio.load(`<ul>
+      <li>Podlaží: 3. NP</li>
+      <li>Stav: Po rekonstrukci</li>
+      <li>Jen text bez dvojtečky</li>
+    </ul>`);
+    const pairs = colonPairs($);
+    assert.ok(pairs.includes('Podlaží: 3. NP'));
+    assert.ok(pairs.includes('Stav: Po rekonstrukci'));
+    assert.equal(pairs.length, 2);
+  });
+
+  test('odkaz se za hodnotu nepovažuje', () => {
+    const $ = cheerio.load('<p>Zdroj: https://example.cz/detail</p>');
+    assert.deepEqual(colonPairs($), []);
+  });
+
+  test('dlouhá věta z popisu se nebere jako parametr', () => {
+    const $ = cheerio.load(
+      '<p>Poznámka: ' + 'velmi dlouhý popis nemovitosti '.repeat(5) + '</p>'
+    );
+    assert.deepEqual(colonPairs($), []);
   });
 });

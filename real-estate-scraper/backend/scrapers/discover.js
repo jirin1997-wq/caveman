@@ -248,6 +248,26 @@ export function paramPairs($) {
   return [...pairs].slice(0, 60);
 }
 
+/**
+ * Náhradní čtení parametrů pro weby, které nepoužívají <dl> ani tabulku.
+ *
+ * Hledá prvky, jejichž vlastní text má tvar „název: hodnota". Je to volnější
+ * a chytí to i věty z popisu, takže se to používá až když selže `paramPairs`.
+ */
+export function colonPairs($) {
+  const pairs = new Set();
+
+  $('li, p, div, span, td').each((_, el) => {
+    const node = $(el);
+    if (node.children().length > 1) return;
+    const text = tidy(node.text());
+    const match = text.match(/^([^:]{2,30}):\s*(.{1,60})$/);
+    if (match && !/^https?/.test(match[2])) pairs.add(`${match[1]}: ${match[2]}`);
+  });
+
+  return [...pairs].slice(0, 40);
+}
+
 /** Souřadnice schované ve zdroji stránky — bez nich nejde vykreslit mapa. */
 export function geoHints(html) {
   const found = new Set();
@@ -283,12 +303,28 @@ export function jsonLdBlocks($) {
 async function outline(url) {
   console.log(`\n${'='.repeat(70)}\n${C.b('Obhlídka')}  ${C.dim(url)}`);
 
-  const res = await axios.get(url, {
-    headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' },
-    timeout: TIMEOUT,
-    maxRedirects: 5,
-    validateStatus: () => true
-  });
+  const fetchPage = (target) =>
+    axios.get(target, {
+      headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' },
+      timeout: TIMEOUT,
+      maxRedirects: 5,
+      validateStatus: () => true
+    });
+
+  let res;
+  try {
+    res = await fetchPage(url);
+  } catch (err) {
+    // Sreality zacyklí přesměrování, dokud nedostanou souhlas s cookies;
+    // na výpisu si vystačí s `noredirect=1`, tak to zkusíme i tady.
+    if (err.code === 'ERR_FR_TOO_MANY_REDIRECTS' && !url.includes('noredirect')) {
+      const retry = `${url}${url.includes('?') ? '&' : '?'}noredirect=1`;
+      console.log(`  ${C.dim('přesměrovací smyčka — zkouším ' + retry)}`);
+      res = await fetchPage(retry);
+    } else {
+      throw err;
+    }
+  }
 
   const html = String(res.data);
   const $ = cheerio.load(html);
@@ -298,13 +334,16 @@ async function outline(url) {
   const description = $('meta[name="description"]').attr('content');
   if (description) console.log(`  popis: ${description.slice(0, 200)}`);
 
+  const params = paramPairs($);
   const parts = pageOutline($);
   for (const [label, items] of [
     ['nadpisy', parts.headings],
     ['navigace', parts.nav],
     ['pole formulářů', parts.fields],
     ['tlačítka', parts.buttons],
-    ['parametry nemovitosti', paramPairs($)],
+    ['parametry nemovitosti', params],
+    // Náhradní čtení jen když to hlavní nic nenašlo — jinak by zdvojovalo.
+    ['parametry (náhradní čtení)', params.length ? [] : colonPairs($)],
     ['souřadnice ve zdroji', geoHints(html)],
     ['strukturovaná data (JSON-LD)', jsonLdBlocks($)]
   ]) {
@@ -317,6 +356,17 @@ async function outline(url) {
   if (api.length) {
     console.log(`\n  ${C.b('API cesty ve zdroji')}:`);
     for (const a of api) console.log(`    ${a}`);
+  }
+
+  // Když nepomohlo ani náhradní čtení, ať je z čeho parser napsat:
+  // vypíšeme kus hlavního obsahu, ne hlavičku stránky.
+  if (!params.length && !colonPairs($).length) {
+    const main = $('main, article, [role="main"]').first();
+    const body = (main.length ? $.html(main) : '').replace(/\s+/g, ' ').trim();
+    if (body) {
+      console.log(`\n  ${C.b('hlavní obsah stránky')} (${body.length} B):`);
+      console.log(`    ${body.slice(0, 3000)}${body.length > 3000 ? ' …' : ''}`);
+    }
   }
 }
 
