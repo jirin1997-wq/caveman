@@ -256,7 +256,12 @@ async function outline(url) {
 export async function discoverAll() {
   // S adresou na příkazové řádce udělá obhlídku té stránky,
   // bez ní projde zdroje inzerátů.
-  const urls = process.argv.slice(2).filter((a) => a.startsWith('http'));
+  // Workflow předává vstup jako jeden argument v uvozovkách, takže víc
+  // adres dorazí slepených mezerou — rozdělit se musí až tady.
+  const urls = process.argv
+    .slice(2)
+    .flatMap((arg) => arg.split(/\s+/))
+    .filter((arg) => arg.startsWith('http'));
   if (urls.length) {
     for (const url of urls) {
       try {
