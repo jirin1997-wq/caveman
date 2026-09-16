@@ -85,6 +85,38 @@ final class FlightDetectorTests: XCTestCase {
         XCTAssertNil(events[0].agl)
     }
 
+    // MARK: - The generated tracks themselves
+
+    /// A local flight lands where it departed. An earlier version of the
+    /// generator flew due east the whole way and "returned" twenty kilometres
+    /// downwind — which the logbook would report as a return to the same field
+    /// while the airfield learning recorded two different places.
+    func testGeneratedFlightReturnsToItsField() {
+        for track in [
+            SyntheticTrack.standardFlight(origin: field, fieldElevation: 250),
+            SyntheticTrack.touchAndGo(origin: field, fieldElevation: 250)
+        ] {
+            guard let first = track.first, let last = track.last else {
+                return XCTFail("empty track")
+            }
+            let drift = GeoMath.distance(first.coordinate, last.coordinate)
+            XCTAssertLessThan(
+                drift, 2_000,
+                "parks \(Int(drift)) m from the departure point — far enough to be a second airfield"
+            )
+        }
+    }
+
+    /// And it must actually go somewhere in between, or the map has nothing to
+    /// draw and the track is not a flight.
+    func testGeneratedFlightActuallyTravels() {
+        let track = SyntheticTrack.standardFlight(origin: field, fieldElevation: 250)
+        let furthest = track
+            .map { GeoMath.distance(field, $0.coordinate) }
+            .max() ?? 0
+        XCTAssertGreaterThan(furthest, 5_000)
+    }
+
     // MARK: - Circuits
 
     func testTouchAndGoProducesTwoOfEach() {

@@ -118,8 +118,15 @@ enum SyntheticTrack {
 
     // MARK: - Presets
 
-    /// Taxi out, roll, climb, cruise, descend, land, taxi in.
-    /// Roughly a 12-minute local flight.
+    /// A local flight: taxi out, roll, climb out, a circuit away from the
+    /// field, back down the reciprocal, land, taxi in, park.
+    ///
+    /// The headings matter. An earlier version flew due east the whole time and
+    /// "landed" twenty kilometres from where it departed — which the logbook
+    /// then reported as a return to the same field, and which the app's own
+    /// airfield learning would have recorded as two different places. The legs
+    /// below close the circuit: the aircraft parks within half a kilometre of
+    /// where it started.
     static func standardFlight(
         origin: Coordinate = Coordinate(latitude: 49.9, longitude: 15.0),
         fieldElevation: Double = 250,
@@ -130,23 +137,29 @@ enum SyntheticTrack {
             startAltitude: fieldElevation,
             start: start,
             segments: [
-                .init(duration: 90, speed: Units.knotsToMps(8)),                                    // taxi out
-                .init(duration: 15, speedFrom: Units.knotsToMps(8), speedTo: Units.knotsToMps(65)), // roll
+                .init(duration: 90, speed: Units.knotsToMps(8), heading: 90),                        // taxi out
+                .init(duration: 15, speedFrom: Units.knotsToMps(8), speedTo: Units.knotsToMps(65),
+                      heading: 90),                                                                  // roll
                 .init(duration: 20, speedFrom: Units.knotsToMps(65), speedTo: Units.knotsToMps(75),
-                      climbFrom: 1, climbTo: 4),                                                    // rotate
-                .init(duration: 150, speed: Units.knotsToMps(80), climb: 4),                        // climb
-                .init(duration: 240, speed: Units.knotsToMps(100)),                                 // cruise
-                .init(duration: 200, speed: Units.knotsToMps(85), climb: -3),                       // descent
+                      climbFrom: 1, climbTo: 4, heading: 90),                                        // rotate
+                .init(duration: 150, speed: Units.knotsToMps(80), climb: 4, heading: 90),            // climb out
+                .init(duration: 93, speed: Units.knotsToMps(100), heading: 90),                      // outbound
+                .init(duration: 60, speed: Units.knotsToMps(100), heading: 0),                       // crosswind
+                .init(duration: 87, speed: Units.knotsToMps(100), heading: 270),                     // inbound
+                .init(duration: 140, speed: Units.knotsToMps(85), climb: -3, heading: 270),          // descent
+                .init(duration: 60, speed: Units.knotsToMps(85), climb: -3, heading: 180),           // base
                 .init(duration: 30, speedFrom: Units.knotsToMps(70), speedTo: Units.knotsToMps(55),
-                      climbFrom: -3, climbTo: 0),                                                   // flare
-                .init(duration: 25, speedFrom: Units.knotsToMps(55), speedTo: Units.knotsToMps(8)), // rollout
-                .init(duration: 90, speed: Units.knotsToMps(8)),                                    // taxi in
-                .init(duration: 60, speed: 0)                                                       // parked
+                      climbFrom: -3, climbTo: 0, heading: 270),                                      // final, flare
+                .init(duration: 25, speedFrom: Units.knotsToMps(55), speedTo: Units.knotsToMps(8),
+                      heading: 270),                                                                 // rollout
+                .init(duration: 90, speed: Units.knotsToMps(8), heading: 270),                       // taxi in
+                .init(duration: 60, speed: 0, heading: 270)                                          // parked
             ]
         )
     }
 
     /// Departure, one circuit, touch-and-go, second circuit, full stop.
+    /// Both circuits close on the field, the same way a real one does.
     static func touchAndGo(
         origin: Coordinate = Coordinate(latitude: 49.9, longitude: 15.0),
         fieldElevation: Double = 250,
@@ -157,27 +170,31 @@ enum SyntheticTrack {
             startAltitude: fieldElevation,
             start: start,
             segments: [
-                .init(duration: 60, speed: Units.knotsToMps(8)),
-                .init(duration: 15, speedFrom: Units.knotsToMps(8), speedTo: Units.knotsToMps(65)),
+                .init(duration: 60, speed: Units.knotsToMps(8), heading: 90),
+                .init(duration: 15, speedFrom: Units.knotsToMps(8), speedTo: Units.knotsToMps(65),
+                      heading: 90),
                 .init(duration: 20, speedFrom: Units.knotsToMps(65), speedTo: Units.knotsToMps(75),
-                      climbFrom: 1, climbTo: 4),
-                .init(duration: 90, speed: Units.knotsToMps(80), climb: 3),
-                .init(duration: 120, speed: Units.knotsToMps(90)),
-                .init(duration: 100, speed: Units.knotsToMps(80), climb: -3),
+                      climbFrom: 1, climbTo: 4, heading: 90),
+                .init(duration: 90, speed: Units.knotsToMps(80), climb: 3, heading: 90),
+                .init(duration: 79, speed: Units.knotsToMps(90), heading: 0),                  // crosswind
+                .init(duration: 41, speed: Units.knotsToMps(90), heading: 270),                // downwind
+                .init(duration: 100, speed: Units.knotsToMps(80), climb: -3, heading: 270),
                 .init(duration: 25, speedFrom: Units.knotsToMps(70), speedTo: Units.knotsToMps(55),
-                      climbFrom: -1.2, climbTo: 0),
+                      climbFrom: -1.2, climbTo: 0, heading: 90),                               // final
                 // Wheels on the runway for 15 s, then straight back into it.
-                .init(duration: 15, speed: Units.knotsToMps(40)),
+                .init(duration: 15, speed: Units.knotsToMps(40), heading: 90),
                 .init(duration: 15, speedFrom: Units.knotsToMps(40), speedTo: Units.knotsToMps(70),
-                      climbFrom: 0, climbTo: 3),
-                .init(duration: 90, speed: Units.knotsToMps(80), climb: 3),
-                .init(duration: 120, speed: Units.knotsToMps(90)),
-                .init(duration: 90, speed: Units.knotsToMps(80), climb: -3),
+                      climbFrom: 0, climbTo: 3, heading: 90),
+                .init(duration: 90, speed: Units.knotsToMps(80), climb: 3, heading: 90),
+                .init(duration: 79, speed: Units.knotsToMps(90), heading: 180),                // crosswind
+                .init(duration: 41, speed: Units.knotsToMps(90), heading: 270),                // downwind
+                .init(duration: 90, speed: Units.knotsToMps(80), climb: -3, heading: 270),
                 .init(duration: 25, speedFrom: Units.knotsToMps(70), speedTo: Units.knotsToMps(55),
-                      climbFrom: -1.8, climbTo: 0),
-                .init(duration: 25, speedFrom: Units.knotsToMps(55), speedTo: Units.knotsToMps(8)),
-                .init(duration: 60, speed: Units.knotsToMps(8)),
-                .init(duration: 60, speed: 0)
+                      climbFrom: -1.8, climbTo: 0, heading: 90),                               // final
+                .init(duration: 25, speedFrom: Units.knotsToMps(55), speedTo: Units.knotsToMps(8),
+                      heading: 90),
+                .init(duration: 60, speed: Units.knotsToMps(8), heading: 90),
+                .init(duration: 60, speed: 0, heading: 90)
             ]
         )
     }

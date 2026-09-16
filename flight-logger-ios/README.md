@@ -356,6 +356,9 @@ Poctivě, protože to není jedno:
 
 **Ověřené:**
 
+- Umělé trasy se vracejí na výchozí plochu (dřív odlétaly 20 km na východ a
+  deník přitom tvrdil návrat na stejné letiště) a přitom se opravdu někam
+  dostanou.
 - Blokové časy na pěti scénářích: celý let vyrobí čtyři události ve správném
   pořadí, blok je delší než let, událost je orazítkovaná zpětně, stání před
   dráhou blok neukončí, a pojíždění bez letu nevyrobí žádný vzlet.
