@@ -29,7 +29,9 @@ defaults:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Projít celou nabídku znamená stovky stran na zdroj; s odstupem 1,2 s
+    # mezi dotazy to trvá desítky minut.
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4

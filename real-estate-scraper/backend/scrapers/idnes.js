@@ -25,7 +25,11 @@ const BASE = 'https://reality.idnes.cz/s/prodej/byty';
 
 const CITY_PATHS = { praha: 'praha', brno: 'brno' };
 
-const MAX_PAGES = 15;
+/**
+ * Strop je jen pojistka proti nekonečnu — běh skončí dřív, jakmile strana
+ * nepřinese nic nového. Dřívějších 15 stran brala jen zlomek nabídky.
+ */
+const MAX_PAGES = Number(process.env.SCRAPER_MAX_PAGES) || 300;
 const DELAY_MS = 1200;
 
 const DETAIL = /\/detail\/prodej\/byt\//;
@@ -108,7 +112,13 @@ async function scrapeCity(city) {
 
     const before = byUrl.size;
     for (const listing of listings) byUrl.set(listing.url, listing);
-    if (byUrl.size === before) break;
+    const added = byUrl.size - before;
+
+    // Po stránkách, ať je z logu poznat, kde se výpis vyčerpal — a jestli
+    // `?page=` vůbec platí. Nula nových hned na druhé straně znamená, že
+    // se parametr ignoruje a pořád dostáváme tu první.
+    console.log(`    strana ${page}: ${listings.length} inzerátů, ${added} nových`);
+    if (added === 0) break;
 
     await sleep(DELAY_MS);
   }

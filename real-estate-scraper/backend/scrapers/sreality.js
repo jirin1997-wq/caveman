@@ -28,7 +28,13 @@ const BASE = 'https://www.sreality.cz/hledani/prodej/byty';
 
 const CITY_PATHS = { praha: 'praha', brno: 'brno' };
 
-const MAX_PAGES = 15;
+/**
+ * Kolik stran výpisu projít. Sreality mají pro Prahu přes 270 stran, takže
+ * dřívějších 15 bralo jen pár procent nabídky. Strop je tu jen jako pojistka
+ * proti nekonečnu — běh stejně skončí dřív, jakmile strana nepřinese nic
+ * nového.
+ */
+const MAX_PAGES = Number(process.env.SCRAPER_MAX_PAGES) || 300;
 const DELAY_MS = 1200;
 
 const HINT = 'Ověř tvar stránky: `npm run discover` — vypíše, kde na výpisu '
@@ -108,7 +114,13 @@ async function scrapeCity(city) {
     // to, co už máme, znamená to, že parametr neplatí nebo výpis skončil.
     const before = byUrl.size;
     for (const listing of listings) byUrl.set(listing.url, listing);
-    if (byUrl.size === before) break;
+    const added = byUrl.size - before;
+
+    // Po stránkách, ať je z logu poznat, kde se výpis vyčerpal — a jestli
+    // stránkování vůbec funguje. Nula nových hned na druhé straně znamená,
+    // že se parametr ignoruje a pořád dostáváme tu první.
+    console.log(`    strana ${page}: ${listings.length} inzerátů, ${added} nových`);
+    if (added === 0) break;
 
     await sleep(DELAY_MS);
   }
