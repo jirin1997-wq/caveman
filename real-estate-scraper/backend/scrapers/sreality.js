@@ -86,6 +86,7 @@ const pageUrl = (path, page) =>
 async function scrapeCity(city) {
   console.log(`📍 Sreality — ${city}`);
   const byUrl = new Map();
+  let emptyStreak = 0;
 
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const url = pageUrl(CITY_PATHS[city], page);
@@ -117,10 +118,18 @@ async function scrapeCity(city) {
     const added = byUrl.size - before;
 
     // Po stránkách, ať je z logu poznat, kde se výpis vyčerpal — a jestli
-    // stránkování vůbec funguje. Nula nových hned na druhé straně znamená,
-    // že se parametr ignoruje a pořád dostáváme tu první.
+    // stránkování vůbec funguje. Dvě prázdné strany za sebou znamenají, že
+    // se parametr ignoruje a pořád dostáváme tu první.
     console.log(`    strana ${page}: ${listings.length} inzerátů, ${added} nových`);
-    if (added === 0) break;
+
+    // Jedna strana beze změny konec výpisu neznamená: zdroj mezi dotazy
+    // přeskládá pořadí nebo stranu zopakuje a scraper by skončil v půlce.
+    // Přesně tím jsme u iDNES přicházeli o dvě třetiny pražské nabídky.
+    emptyStreak = added === 0 ? emptyStreak + 1 : 0;
+    if (emptyStreak >= 2) {
+      console.log('    dvě strany bez nového inzerátu — konec výpisu');
+      break;
+    }
 
     await sleep(DELAY_MS);
   }

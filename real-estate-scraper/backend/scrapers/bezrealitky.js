@@ -102,6 +102,8 @@ const countCards = (html) => cheerio.load(html)(CARD).length;
  * se nesmí končit podle přírůstku, protože celá strana může být odjinud.
  */
 async function walkPages({ urlFor, cities, cityScoped, label, byUrl }) {
+  let emptyStreak = 0;
+
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const url = urlFor(page);
 
@@ -130,7 +132,14 @@ async function walkPages({ urlFor, cities, cityScoped, label, byUrl }) {
     const added = byUrl.size - before;
     console.log(`    ${label} strana ${page}: ${cardsOnPage} karet, ${added} nových`);
 
-    if (cityScoped && added === 0) return;
+    // Jedna strana beze změny konec výpisu neznamená: zdroj mezi dotazy
+    // přeskládá pořadí nebo stranu zopakuje. U celostátního výpisu navíc
+    // může být celá strana z jiných měst, tam se podle přírůstku nekončí.
+    emptyStreak = added === 0 ? emptyStreak + 1 : 0;
+    if (cityScoped && emptyStreak >= 2) {
+      console.log(`    ${label}: dvě strany bez nového inzerátu — konec výpisu`);
+      return;
+    }
 
     await sleep(DELAY_MS);
   }
