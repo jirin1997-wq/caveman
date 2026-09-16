@@ -4,6 +4,7 @@ import {
   parseDisposition,
   parseArea,
   plausibleArea,
+  plausiblePrice,
   parsePrice,
   parseLocality,
   parseBuildingType,
@@ -209,5 +210,26 @@ describe('plausibleArea', () => {
     assert.equal(plausibleArea(50_000), null);
     assert.equal(plausibleArea(null), null);
     assert.equal(plausibleArea(NaN), null);
+  });
+});
+
+describe('plausiblePrice', () => {
+  test('propustí běžnou cenu bytu', () => {
+    assert.equal(plausiblePrice(8_700_000), 8_700_000);
+    assert.equal(plausiblePrice(450_000_000), 450_000_000);
+  });
+
+  test('zahodí řádovou záměnu', () => {
+    assert.equal(plausiblePrice(1_016_200_000), null);
+    assert.equal(plausiblePrice(50_000), null);
+    assert.equal(plausiblePrice(null), null);
+  });
+
+  test('buildListing nesmyslnou cenu neuloží vůbec', () => {
+    const listing = buildListing({
+      url: 'https://x/1', source: 'sreality', city: 'praha',
+      name: 'Prodej bytu 3+kk 66 m²', price: 1_011_300_000, locality: 'Praha 5'
+    });
+    assert.equal(listing, null);
   });
 });

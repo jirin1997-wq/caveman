@@ -122,6 +122,18 @@ export function plausibleArea(value) {
   return Number.isFinite(value) && value >= 8 && value <= 2000 ? value : null;
 }
 
+/**
+ * Poslední pojistka proti nesmyslné ceně.
+ *
+ * Byt za miliardu i byt za deset tisíc je chyba čtení, ne nabídka. Meze
+ * jsou schválně široké — mají chytit řádovou záměnu, ne posuzovat, co je
+ * drahé. Stejně jako u plochy platí: vyhodit záznam je lepší než nechat
+ * ho pokazit medián.
+ */
+export function plausiblePrice(value) {
+  return Number.isFinite(value) && value >= 200_000 && value <= 500_000_000 ? value : null;
+}
+
 /** Cena za m² — počítá se, nikdy se nepřebírá ze zdroje. */
 export function pricePerM2(price, sizeM2) {
   if (!price || !sizeM2) return null;
@@ -134,7 +146,7 @@ export function pricePerM2(price, sizeM2) {
  * nemá smysl ukládat, jen by kazil mediány.
  */
 export function buildListing(raw) {
-  const price = parsePrice(raw.price);
+  const price = plausiblePrice(parsePrice(raw.price));
   if (!raw.url || !price) return null;
 
   const sizeM2 = plausibleArea(raw.sizeM2 ?? parseArea(raw.name));

@@ -256,3 +256,22 @@ describe('cityFromLocality', () => {
     assert.equal(cityFromLocality(''), null);
   });
 });
+
+describe('cena — případy z měsíčního provozu', () => {
+  test('číslo ze sousedního prvku se nepřilepí k ceně', () => {
+    // Slepený text karty vypadal jako „1 10 113 000 Kč" a scraper z toho
+    // udělal byt za 1,1 miliardy. Skupiny tisíců musí být trojciferné.
+    assert.equal(priceFromText('1 10 113 000 Kč'), 10_113_000);
+    assert.equal(priceFromText('2 6 400 000 Kč'), 6_400_000);
+  });
+
+  test('běžné tvary ceny zůstávají', () => {
+    assert.equal(priceFromText('11 900 000 Kč'), 11_900_000);
+    assert.equal(priceFromText('4500000 Kč'), 4_500_000);
+    assert.equal(priceFromText('950 000 Kč'), 950_000);
+  });
+
+  test('drobná částka není cena nemovitosti', () => {
+    assert.equal(priceFromText('500 Kč'), null);
+  });
+});

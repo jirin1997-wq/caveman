@@ -19,12 +19,17 @@ export const unnbsp = (text) => String(text || '').replace(/[  ]/g, ' ');
 /**
  * Cena v korunách z libovolného textu.
  *
+ * Skupiny tisíců musí být přesně trojciferné. Volnější tvar `\d[\d ]{4,}`
+ * spolkl přes mezeru i číslo ze sousedního prvku, takže se z „10 113 000 Kč"
+ * stalo 1 011 300 000 — v datech pak stály byty za miliardu a hnaly
+ * medián čtvrti nahoru.
+ *
  * Záporný lookahead vynechává cenu za metr: Bezrealitky píšou
  * „6 400 000 Kč(112 281 Kč / m²)" a bez něj by scraper bral druhé číslo.
  * Cena za m² se počítá z ceny a plochy, nikdy se nepřebírá ze zdroje.
  */
 export function priceFromText(text) {
-  const match = unnbsp(text).match(/(\d[\d ]{4,})\s*Kč(?!\s*\/\s*m)/);
+  const match = unnbsp(text).match(/(\d{1,3}(?: \d{3})+|\d{4,})\s*Kč(?!\s*\/\s*m)/);
   if (!match) return null;
   const value = parseInt(match[1].replace(/\s/g, ''), 10);
   return Number.isFinite(value) && value > 0 ? value : null;
