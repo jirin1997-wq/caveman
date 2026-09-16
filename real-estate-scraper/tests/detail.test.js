@@ -127,3 +127,43 @@ describe('parseDetail', () => {
     assert.deepEqual(empty.amenities, []);
   });
 });
+
+// Parametry opsané z aktivního detailu na iDNES (běh „Průzkum zdrojů"
+// 2026-09-16). Popisky se od Bezrealitek liší, proto vlastní fixtura.
+const IDNES = `<html><body><main>
+  <h1>Prodej bytu 2+kk 108 m²</h1>
+  <dl>
+    <dt>Konstrukce budovy</dt><dd>cihlová</dd>
+    <dt>Stav bytu</dt><dd>novostavba</dd>
+    <dt>Vlastnictví</dt><dd>osobní</dd>
+    <dt>Podlaží</dt><dd>přízemí (1. NP = nadzemní podlaží)</dd>
+    <dt>Terasa</dt><dd>48 m2</dd>
+    <dt>Vybavení</dt><dd>nezařízený</dd>
+    <dt>PENB</dt><dd>B (vyhl. č. 264/2020 Sb.)</dd>
+  </dl>
+</main></body></html>`;
+
+describe('parseDetail — iDNES', () => {
+  const detail = parseDetail(IDNES);
+
+  test('„Stav bytu" znamená totéž co „Stav" jinde', () => {
+    assert.equal(detail.condition, 'novostavba');
+  });
+
+  test('přečte konstrukci budovy psanou malým písmenem', () => {
+    assert.equal(detail.building_type, 'cihlova');
+  });
+
+  test('terasa z parametrů se pozná jako vybavenost', () => {
+    assert.ok(detail.amenities.includes('terasa'));
+  });
+
+  test('doplní vybavení a PENB', () => {
+    assert.equal(detail.furnishing, 'nezařízený');
+    assert.match(detail.energy_rating, /^B/);
+  });
+
+  test('iDNES na detailu souřadnice neuvádí — mapa je dotahuje skriptem', () => {
+    assert.equal(detail.latitude, null);
+  });
+});

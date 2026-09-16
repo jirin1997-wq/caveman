@@ -101,9 +101,11 @@ export function parseDetail(html) {
   const scope = main.length ? main : $('body');
   scope.find('script, style').remove();
 
+  // Popisky se mezi zdroji liší v drobnostech: Bezrealitky píšou „Stav",
+  // iDNES „Stav bytu". Proto se u každého údaje zkouší víc názvů.
   const labels = [
     ...VALUE_OF(params, 'konstrukce budovy', 'stavba', 'typ budovy'),
-    ...VALUE_OF(params, 'stav', 'stav objektu', 'stav nemovitosti')
+    ...VALUE_OF(params, 'stav', 'stav bytu', 'stav objektu', 'stav nemovitosti')
   ];
 
   return {
@@ -115,6 +117,7 @@ export function parseDetail(html) {
     amenities: parseAmenities(tidy(scope.text()).slice(0, 8000)),
     energy_rating: params.get('penb') || params.get('energeticka narocnost') || null,
     ownership: params.get('vlastnictvi') || null,
-    heating: params.get('vytapeni') || null
+    heating: params.get('vytapeni') || null,
+    furnishing: params.get('vybaveni') || params.get('vybaveno') || null
   };
 }
