@@ -163,7 +163,7 @@ final class FlightStore: ObservableObject {
     /// The whole logbook as CSV, for anyone who keeps their hours in a
     /// spreadsheet.
     func exportLogbookCSV() -> URL? {
-        var csv = "datum;odlet;prilet;vzlet;pristani;doba;letadlo;max_alt_ft;max_agl_ft;vzdalenost_nm;jistota\n"
+        var csv = "datum;odlet;prilet;off_blocks;vzlet;pristani;on_blocks;doba_letu;blokovy_cas;pojizdeni;letadlo;max_alt_ft;max_agl_ft;vzdalenost_nm;jistota\n"
         let day = DateFormatter()
         day.dateFormat = "yyyy-MM-dd"
         let clock = DateFormatter()
@@ -174,9 +174,13 @@ final class FlightStore: ObservableObject {
                 day.string(from: flight.takeoff.time),
                 flight.departureLabel,
                 flight.arrivalLabel,
+                flight.offBlocks.map { clock.string(from: $0.time) } ?? "",
                 clock.string(from: flight.takeoff.time),
                 flight.landing.map { clock.string(from: $0.time) } ?? "",
+                flight.onBlocks.map { clock.string(from: $0.time) } ?? "",
                 Units.durationLabel(flight.duration),
+                Units.durationLabel(flight.blockTime),
+                Units.durationLabel(flight.taxiTime),
                 flight.aircraft ?? "",
                 String(Int(Units.metersToFeet(flight.maxAltitude).rounded())),
                 flight.maxAGL.map { String(Int(Units.metersToFeet($0).rounded())) } ?? "",

@@ -40,6 +40,21 @@ struct DetectionProfile: Codable, Equatable, Sendable {
     /// trusted as the terrain elevation underneath the aircraft.
     var referenceValidRadius: Double
 
+    /// Ground speed above which the aircraft is taxiing rather than parked.
+    /// This is the off-blocks threshold — the moment block time starts.
+    var movingSpeed: Double
+
+    /// Ground speed below which the aircraft has stopped. Lower than
+    /// `movingSpeed`, so a gust or a GPS wobble on the apron cannot toggle it.
+    var stoppedSpeed: Double
+
+    /// How long movement must hold before block time starts.
+    var movingConfirm: TimeInterval
+
+    /// How long the aircraft must be still before block time ends. Long, on
+    /// purpose: a hold short of the runway is not the end of the flight.
+    var stoppedConfirm: TimeInterval
+
     static let glider = DetectionProfile(
         name: "Kluzák",
         takeoffSpeed: Units.knotsToMps(25),
@@ -51,7 +66,11 @@ struct DetectionProfile: Codable, Equatable, Sendable {
         maxHorizontalAccuracy: 50,
         touchAndGoWindow: 60,
         climbWindow: 6,
-        referenceValidRadius: 15_000
+        referenceValidRadius: 15_000,
+        movingSpeed: Units.knotsToMps(4),
+        stoppedSpeed: Units.knotsToMps(1.5),
+        movingConfirm: 10,
+        stoppedConfirm: 45
     )
 
     static let ultralight = DetectionProfile(
@@ -65,7 +84,11 @@ struct DetectionProfile: Codable, Equatable, Sendable {
         maxHorizontalAccuracy: 50,
         touchAndGoWindow: 60,
         climbWindow: 6,
-        referenceValidRadius: 15_000
+        referenceValidRadius: 15_000,
+        movingSpeed: Units.knotsToMps(4),
+        stoppedSpeed: Units.knotsToMps(1.5),
+        movingConfirm: 10,
+        stoppedConfirm: 45
     )
 
     static let pistonSingle = DetectionProfile(
@@ -79,7 +102,11 @@ struct DetectionProfile: Codable, Equatable, Sendable {
         maxHorizontalAccuracy: 50,
         touchAndGoWindow: 60,
         climbWindow: 6,
-        referenceValidRadius: 15_000
+        referenceValidRadius: 15_000,
+        movingSpeed: Units.knotsToMps(4),
+        stoppedSpeed: Units.knotsToMps(1.5),
+        movingConfirm: 10,
+        stoppedConfirm: 45
     )
 
     static let turbine = DetectionProfile(
@@ -93,7 +120,11 @@ struct DetectionProfile: Codable, Equatable, Sendable {
         maxHorizontalAccuracy: 60,
         touchAndGoWindow: 90,
         climbWindow: 8,
-        referenceValidRadius: 25_000
+        referenceValidRadius: 25_000,
+        movingSpeed: Units.knotsToMps(5),
+        stoppedSpeed: Units.knotsToMps(2),
+        movingConfirm: 12,
+        stoppedConfirm: 60
     )
 
     static let presets: [DetectionProfile] = [glider, ultralight, pistonSingle, turbine]
@@ -119,13 +150,21 @@ extension DetectionProfile {
     ///
     /// Deliberately conservative — a poisoned reference feeds a wrong AGL into
     /// every later decision, which is worse than having no reference at all.
-    func acceptsGroundSample(phase: FlightPhase, speed: Double, agl: Double?) -> Bool {
+    func acceptsGroundSample(
+        phase: FlightPhase,
+        speed: Double,
+        agl: Double?,
+        motion: MotionSample? = nil
+    ) -> Bool {
         guard phase != .airborne, phase != .approach else { return false }
         guard speed >= 0, speed <= groundSampleSpeed else { return false }
         // Something already says we are well clear of the terrain, so we are not
         // resting on it: a helicopter in a low hover, or a glider on a slow
         // final. Neither may rewrite the reference.
         if let agl, agl > airborneAGL { return false }
+        // And when the phone's own sensors are available, a hard-shaken phone —
+        // a grass strip at the start of the roll — is not a stationary aircraft.
+        if let motion, !motion.isPlausiblyAtRest { return false }
         return true
     }
 }

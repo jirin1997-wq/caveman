@@ -7,7 +7,10 @@ final class FlightDetectorTests: XCTestCase {
 
     private let field = Coordinate(latitude: 49.9, longitude: 15.0)
 
-    /// Replays a track and returns every event the detector emitted.
+    /// Replays a track and returns the takeoffs and landings it produced.
+    ///
+    /// Block events (off-blocks / on-blocks) come out of the same call but are a
+    /// separate concern with their own tests — see `BlockTimeTests`.
     private func run(
         _ fixes: [Fix],
         profile: DetectionProfile = .pistonSingle,
@@ -19,7 +22,7 @@ final class FlightDetectorTests: XCTestCase {
             let sample = elevation.map { ElevationSample(meters: $0, source: .groundReference) }
             events.append(contentsOf: detector.ingest(fix, elevation: sample))
         }
-        return events
+        return events.filter(\.kind.isAirEvent)
     }
 
     // MARK: - The basic case

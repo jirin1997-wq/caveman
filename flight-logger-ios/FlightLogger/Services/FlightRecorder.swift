@@ -20,10 +20,17 @@ final class FlightRecorder: ObservableObject {
     /// whether AGL is trustworthy.
     @Published private(set) var elevation: ElevationSample?
 
+    /// The track as it is being recorded, thinned for drawing. Drives the live
+    /// map and the live graph; the full-resolution track still goes to disk.
+    @Published private(set) var liveTrack = TrackBuffer()
+    /// What the phone's own sensors are contributing right now.
+    @Published private(set) var motion = MotionSample()
+
     let store: FlightStore
     let settings: AppSettings
     let location: LocationService
     let elevationProvider: CombinedElevationProvider
+    let motionService: MotionService
 
     private let detector: FlightDetector
     let airports: AirportDatabase
@@ -39,10 +46,19 @@ final class FlightRecorder: ObservableObject {
     private let trackInterval: TimeInterval = 1
     private let trackFlushInterval: TimeInterval = 20
 
-    init(store: FlightStore, settings: AppSettings, location: LocationService = LocationService()) {
+    /// An off-blocks seen before a takeoff, waiting for the flight it belongs to.
+    private var pendingOffBlocks: FlightEvent?
+
+    init(
+        store: FlightStore,
+        settings: AppSettings,
+        location: LocationService = LocationService(),
+        motionService: MotionService = MotionService()
+    ) {
         self.store = store
         self.settings = settings
         self.location = location
+        self.motionService = motionService
         // Held in a local first: Swift will not let an initializer read back a
         // stored property until every one of them has a value.
         let airports = AirportDatabase.loadDefault(userDirectory: AppPaths.root)
@@ -70,12 +86,15 @@ final class FlightRecorder: ObservableObject {
         detector.profile = settings.profile
         elevationProvider.useOnline = settings.useOnlineElevation
         location.start()
+        motionService.start()
+        liveTrack.reset()
         isRecording = location.isRunning
         applyIdleTimer()
     }
 
     func stop() {
         location.stop()
+        motionService.stop()
         isRecording = false
         flushTrack(force: true)
         elevationProvider.flush()
@@ -100,7 +119,13 @@ final class FlightRecorder: ObservableObject {
         let sample = elevationProvider.bestEffort(at: fix.coordinate, now: fix.timestamp)
         elevation = sample
 
-        let events = detector.ingest(fix, elevation: sample)
+        let motionSample = motionService.sample
+        motion = motionSample
+        let events = detector.ingest(
+            fix,
+            elevation: sample,
+            motion: motionSample.hasData ? motionSample : nil
+        )
         snapshot = detector.snapshot
 
         // Terrain reference: while the aircraft is on the surface and moving no
@@ -109,9 +134,13 @@ final class FlightRecorder: ObservableObject {
         if detector.profile.acceptsGroundSample(
             phase: detector.phase,
             speed: snapshot.speed,
-            agl: snapshot.agl
+            agl: snapshot.agl,
+            motion: motionSample.hasData ? motionSample : nil
         ) {
             elevationProvider.noteGroundSample(fix)
+            // Same moment, same reason: zero the barometer against the surface
+            // the aircraft is standing on.
+            motionService.noteGroundContact(at: fix.timestamp)
             persistGroundReferenceIfWorthwhile(now: fix.timestamp)
             // Parked at a strip the app learned but has no elevation for yet:
             // this is the moment it can measure one. Next visit to that field
@@ -121,6 +150,7 @@ final class FlightRecorder: ObservableObject {
             }
         } else if detector.phase == .airborne {
             elevationProvider.endGroundRun()
+            motionService.endGroundRun()
         }
 
         elevationProvider.prefetch(around: fix.coordinate, now: fix.timestamp)
@@ -129,7 +159,7 @@ final class FlightRecorder: ObservableObject {
             handle(event)
         }
 
-        recordTrackPoint(fix: fix, agl: snapshot.agl, speed: snapshot.speed)
+        recordTrackPoint(fix: fix, agl: snapshot.agl, speed: snapshot.speed, vs: snapshot.climbRate)
     }
 
     /// Names the place an event happened.
@@ -193,6 +223,14 @@ final class FlightRecorder: ObservableObject {
         lastEvent = event
 
         switch event.kind {
+        case .offBlocks:
+            // Held until a takeoff claims it. An off-blocks that never leads to
+            // a flight — taxiing the aircraft to the hangar — is simply dropped.
+            pendingOffBlocks = event
+
+        case .onBlocks:
+            closeBlocks(with: event)
+
         case .takeoff:
             // A takeoff while a flight is still open means we missed a landing
             // (signal loss, app killed). Leave the old entry open and honest
@@ -203,6 +241,8 @@ final class FlightRecorder: ObservableObject {
             } ?? false
 
             var flight = Flight(takeoff: event, landing: nil)
+            flight.offBlocks = pendingOffBlocks
+            pendingOffBlocks = nil
             flight.aircraft = settings.aircraft.isEmpty ? nil : settings.aircraft
             flight.isTouchAndGo = touchAndGo
             flight.maxAltitude = event.altitude
@@ -230,13 +270,39 @@ final class FlightRecorder: ObservableObject {
         }
     }
 
+    /// Attaches an on-blocks time to the flight that just landed.
+    ///
+    /// Only to a flight whose landing is recent — an aircraft that is pushed
+    /// into the hangar an hour later did not just finish taxiing in.
+    private func closeBlocks(with event: FlightEvent) {
+        pendingOffBlocks = nil
+        guard let index = store.flights.firstIndex(where: { flight in
+            guard let landing = flight.landing, flight.onBlocks == nil else { return false }
+            return event.time.timeIntervalSince(landing.time) <= 3600
+        }) else { return }
+
+        var flight = store.flights[index]
+        flight.onBlocks = event
+        store.upsert(flight)
+        if currentFlight?.id == flight.id { currentFlight = flight }
+    }
+
     // MARK: - Track
 
-    private func recordTrackPoint(fix: Fix, agl: Double?, speed: Double) {
+    private func recordTrackPoint(fix: Fix, agl: Double?, speed: Double, vs: Double?) {
+        // The live map and graph draw from the moment recording starts, not
+        // from the moment a flight opens — the taxi out is part of what the
+        // pilot wants to watch being drawn.
+        let dueForLive = liveTrack.latest
+            .map { fix.timestamp.timeIntervalSince($0.t) >= trackInterval } ?? true
+        if dueForLive {
+            liveTrack.append(TrackPoint(fix: fix, agl: agl, speed: speed, vs: vs))
+        }
+
         guard currentFlight != nil else { return }
         if let last = lastTrackPoint, fix.timestamp.timeIntervalSince(last.t) < trackInterval { return }
 
-        let point = TrackPoint(fix: fix, agl: agl, speed: speed)
+        let point = TrackPoint(fix: fix, agl: agl, speed: speed, vs: vs)
         if var flight = currentFlight {
             // Distance needs a previous point; the maxima and the count do not,
             // so they must not sit behind the same condition.
@@ -355,6 +421,9 @@ final class FlightRecorder: ObservableObject {
     }
 
     // MARK: - Diagnostics
+
+    /// Taxiing now? Block time is running.
+    var isMoving: Bool { detector.isMoving }
 
     var cachedTiles: Int { elevationProvider.cachedTileCount }
     var groundReference: CombinedElevationProvider.GroundReference? { elevationProvider.groundReference }

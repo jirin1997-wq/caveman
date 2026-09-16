@@ -4,6 +4,9 @@ import Foundation
 enum FlightPhase: String, Codable, Sendable {
     case unknown
     case onGround
+    /// Moving under its own power but not yet accelerating for departure.
+    /// Block time is running.
+    case taxi
     case takeoffRoll
     case airborne
     case approach
@@ -12,6 +15,7 @@ enum FlightPhase: String, Codable, Sendable {
         switch self {
         case .unknown: return "ČEKÁM NA GPS"
         case .onGround: return "NA ZEMI"
+        case .taxi: return "POJÍŽDÍM"
         case .takeoffRoll: return "ROZJEZD"
         case .airborne: return "VE VZDUCHU"
         case .approach: return "PŘIBLÍŽENÍ"
@@ -59,6 +63,10 @@ final class FlightDetector {
         var agl: Double?
         var elevation: ElevationSample?
         var climbRate: Double?
+        var motion: MotionSample?
+        /// True when `agl` came from the barometer rather than from GPS
+        /// altitude minus a terrain elevation.
+        var aglIsBarometric = false
     }
 
     var profile: DetectionProfile
@@ -75,6 +83,12 @@ final class FlightDetector {
     private var groundedSince: Date?
     /// Wheels on the runway without slowing down — see `looksTouchedDown`.
     private var touchSince: Date?
+
+    /// Block state: is the aircraft moving under its own power? Independent of
+    /// whether it is flying — block time spans taxi, flight and taxi again.
+    private(set) var isMoving = false
+    private var movingSince: Date?
+    private var stoppedSince: Date?
 
     /// Guards against inventing an event for a transition we never saw: opening
     /// the app mid-flight must not log a takeoff.
@@ -99,6 +113,9 @@ final class FlightDetector {
         airborneSince = nil
         groundedSince = nil
         touchSince = nil
+        movingSince = nil
+        stoppedSince = nil
+        isMoving = false
         hasObservedGround = false
         hasObservedAir = false
         phase = .unknown
@@ -110,9 +127,13 @@ final class FlightDetector {
     /// - Parameter elevation: terrain elevation under the aircraft, from
     ///   `CombinedElevationProvider`. Nil is tolerated — the detector falls back
     ///   to speed and climb rate and marks its events `.low` confidence.
-    /// - Returns: events detected on this fix. Normally empty; at most one.
+    /// - Parameter motion: what the phone's own sensors say, when they are
+    ///   available. The barometer's height and climb rate are preferred over
+    ///   anything derived from GPS altitude, which is far noisier. Passing nil
+    ///   leaves behaviour exactly as it is without motion data.
+    /// - Returns: events detected on this fix. Normally empty.
     @discardableResult
-    func ingest(_ fix: Fix, elevation: ElevationSample?) -> [FlightEvent] {
+    func ingest(_ fix: Fix, elevation: ElevationSample?, motion: MotionSample? = nil) -> [FlightEvent] {
         guard isUsable(fix) else { return [] }
 
         if let last = lastFix {
@@ -128,6 +149,10 @@ final class FlightDetector {
                 airborneSince = nil
                 groundedSince = nil
                 touchSince = nil
+                // The block timers restart too, but `isMoving` stands: going
+                // dark is no evidence the aircraft stopped.
+                movingSince = nil
+                stoppedSince = nil
                 phase = .unknown
                 // Forgetting what we saw is the point: it stops the next
                 // confirmation from claiming a takeoff nobody watched.
@@ -139,20 +164,30 @@ final class FlightDetector {
         let speed = resolveSpeed(fix)
         lastFix = fix
 
-        var sample = Sample(fix: fix, speed: speed, agl: nil, elevation: elevation, climbRate: nil)
+        var sample = Sample(
+            fix: fix, speed: speed, agl: nil,
+            elevation: elevation, climbRate: nil, motion: motion
+        )
         if let elevation, fix.hasUsableAltitude {
             sample.agl = fix.altitude - elevation.meters
+        }
+        // The barometer wins when it has a zero to measure from: centimetres of
+        // relative precision against the GPS receiver's several metres.
+        if let baro = motion?.baroAGL {
+            sample.agl = baro
+            sample.aglIsBarometric = true
         }
 
         buffer.append(sample)
         trimBuffer(now: fix.timestamp)
-        sample.climbRate = climbRate(at: fix.timestamp)
+        sample.climbRate = motion?.climbRate ?? climbRate(at: fix.timestamp)
         buffer[buffer.count - 1] = sample
 
         if wasOnGround(sample), sample.speed <= profile.landingSpeed { hasObservedGround = true }
         if looksAirborne(sample) { hasObservedAir = true }
 
-        let events = advance(with: sample)
+        var events = advance(with: sample)
+        events.append(contentsOf: advanceBlocks(with: sample))
         updateSnapshot(with: sample)
         return events
     }
@@ -199,7 +234,7 @@ final class FlightDetector {
             }
             return []
 
-        case .onGround, .takeoffRoll:
+        case .onGround, .taxi, .takeoffRoll:
             guard confirmed(airborneSince, at: sample) else { return [] }
             phase = .airborne
             airborneSince = nil
@@ -223,6 +258,52 @@ final class FlightDetector {
             }
             return []
         }
+    }
+
+    /// Off-blocks and on-blocks — the other pair of times a logbook wants.
+    ///
+    /// Flight time is wheels-off to wheels-on. Block time is the whole movement:
+    /// from when the aircraft first rolls to when it finally stops, taxi
+    /// included. They are different numbers and pilots log both, so the app
+    /// detects both rather than making one up from the other.
+    ///
+    /// The stop needs a long dwell on purpose. Holding short of the runway,
+    /// waiting for a landing aircraft, is not the end of a flight.
+    private func advanceBlocks(with sample: Sample) -> [FlightEvent] {
+        if sample.speed >= profile.movingSpeed {
+            if movingSince == nil { movingSince = sample.fix.timestamp }
+            stoppedSince = nil
+        } else if sample.speed >= 0 && sample.speed <= profile.stoppedSpeed {
+            if stoppedSince == nil { stoppedSince = sample.fix.timestamp }
+            movingSince = nil
+        } else {
+            // The dead band between the two thresholds — the hysteresis that
+            // keeps a wobbling GPS from toggling block time.
+            movingSince = nil
+            stoppedSince = nil
+        }
+
+        if !isMoving, let since = movingSince,
+           sample.fix.timestamp.timeIntervalSince(since) >= profile.movingConfirm {
+            isMoving = true
+            movingSince = nil
+            return [makeEvent(kind: .offBlocks, at: indexOfSample(atOrAfter: since))]
+        }
+
+        if isMoving, let since = stoppedSince,
+           sample.fix.timestamp.timeIntervalSince(since) >= profile.stoppedConfirm {
+            isMoving = false
+            stoppedSince = nil
+            return [makeEvent(kind: .onBlocks, at: indexOfSample(atOrAfter: since))]
+        }
+
+        return []
+    }
+
+    /// First buffered sample at or after a timestamp — how a block event gets
+    /// backdated to the moment the aircraft actually started or stopped.
+    private func indexOfSample(atOrAfter time: Date) -> Int {
+        buffer.firstIndex { $0.fix.timestamp >= time } ?? max(0, buffer.count - 1)
     }
 
     private func confirmed(_ since: Date?, at sample: Sample) -> Bool {
@@ -302,7 +383,12 @@ final class FlightDetector {
     private func makeEvent(kind: FlightEventKind, at index: Int) -> FlightEvent {
         let s = buffer[max(0, min(index, buffer.count - 1))]
         let source = s.elevation?.source ?? .unavailable
-        let confidence = EventConfidence.forTerrain(s.elevation, agl: s.agl)
+        // A barometric height is measured against the surface the aircraft was
+        // standing on, by a sensor an order of magnitude quieter than GPS
+        // altitude. It does not depend on the terrain lookup at all.
+        let confidence = s.aglIsBarometric
+            ? EventConfidence.high
+            : EventConfidence.forTerrain(s.elevation, agl: s.agl)
         return FlightEvent(
             kind: kind,
             time: s.fix.timestamp,
@@ -356,6 +442,7 @@ final class FlightDetector {
 
     private func updateSnapshot(with s: Sample) {
         var display = phase
+        if phase == .onGround, isMoving { display = .taxi }
         if phase == .onGround || phase == .unknown, airborneSince != nil { display = .takeoffRoll }
         if phase == .airborne, groundedSince != nil { display = .approach }
         if phase == .unknown, airborneSince == nil { display = .unknown }
@@ -369,7 +456,7 @@ final class FlightDetector {
         switch phase {
         case .unknown:
             pending = airborneSince ?? groundedSince
-        case .onGround, .takeoffRoll:
+        case .onGround, .taxi, .takeoffRoll:
             pending = airborneSince
         case .airborne, .approach:
             pending = groundedSince ?? touchSince

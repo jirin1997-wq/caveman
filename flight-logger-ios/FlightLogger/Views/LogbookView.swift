@@ -58,16 +58,22 @@ struct LogbookView: View {
     private var summaryRow: some View {
         let closed = store.flights.filter { !$0.isOpen }
         let hours = closed.compactMap(\.duration).reduce(0, +)
+        let blocks = closed.compactMap(\.blockTime).reduce(0, +)
         let landings = closed.count
-        return HStack {
+        return HStack(alignment: .top) {
             VStack(alignment: .leading) {
                 Text("Nalétáno").font(.caption).foregroundStyle(.secondary)
-                Text(Units.durationLabel(hours)).font(.title3.weight(.bold))
+                Text(Units.durationLabel(hours)).font(.title3.weight(.bold).monospacedDigit())
+            }
+            Spacer()
+            VStack(alignment: .leading) {
+                Text("Blok").font(.caption).foregroundStyle(.secondary)
+                Text(Units.durationLabel(blocks)).font(.title3.weight(.bold).monospacedDigit())
             }
             Spacer()
             VStack(alignment: .trailing) {
                 Text("Přistání").font(.caption).foregroundStyle(.secondary)
-                Text("\(landings)").font(.title3.weight(.bold))
+                Text("\(landings)").font(.title3.weight(.bold).monospacedDigit())
             }
         }
     }
@@ -89,9 +95,16 @@ private struct FlightRow: View {
                 Text("\(flight.departureLabel) → \(flight.arrivalLabel)")
                     .font(.headline)
                 Spacer()
-                Text(Units.durationLabel(flight.duration))
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text(Units.durationLabel(flight.duration))
+                        .font(.subheadline.monospacedDigit())
+                    if let block = flight.blockTime {
+                        Text("blok \(Units.durationLabel(block))")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
             HStack(spacing: 6) {
                 Text(flight.takeoff.time.formatted(date: .abbreviated, time: .shortened))

@@ -20,10 +20,26 @@ struct FlightDetailView: View {
                 }
             }
 
-            Section("Souhrn") {
+            if !track.isEmpty {
+                Section {
+                    FlightGraph(points: track)
+                        .padding(.vertical, 4)
+                } header: {
+                    Text("Průběh")
+                }
+            }
+
+            Section("Časy") {
+                row("Vyjetí (off-blocks)", flight.offBlocks.map { $0.time.formatted(date: .omitted, time: .standard) } ?? "—")
                 row("Vzlet", flight.takeoff.time.formatted(date: .abbreviated, time: .standard))
                 row("Přistání", flight.landing.map { $0.time.formatted(date: .abbreviated, time: .standard) } ?? "—")
+                row("Zastavení (on-blocks)", flight.onBlocks.map { $0.time.formatted(date: .omitted, time: .standard) } ?? "—")
                 row("Doba letu", Units.durationLabel(flight.duration))
+                row("Blokový čas", Units.durationLabel(flight.blockTime))
+                row("Pojíždění celkem", Units.durationLabel(flight.taxiTime))
+            }
+
+            Section("Souhrn") {
                 row("Odlet", flight.departureLabel)
                 row("Přílet", flight.arrivalLabel)
                 row("Letadlo", flight.aircraft ?? "—")
@@ -34,9 +50,15 @@ struct FlightDetailView: View {
             }
 
             Section("Detekce") {
+                if let offBlocks = flight.offBlocks {
+                    eventRow(offBlocks)
+                }
                 eventRow(flight.takeoff)
                 if let landing = flight.landing {
                     eventRow(landing)
+                }
+                if let onBlocks = flight.onBlocks {
+                    eventRow(onBlocks)
                 }
             }
 

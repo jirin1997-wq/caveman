@@ -19,6 +19,10 @@ odlet. Musí platit obojí najednou.
 | **Učí se plochy** | Letiště, které v databázi není (LKHN, Záhoří, louka), si zapamatuje samo |
 | **Voda** | Vodní plochy, hydroplány — reference se sbírá i za pojíždění po hladině |
 | **Deník** | Doba letu, odlet/přílet, max. výška, uletěná vzdálenost, nalétané hodiny |
+| **Živá mapa** | Trasa se kreslí **při letu**, ne až potom. Na celou obrazovku i jako karta |
+| **Graf průběhu** | Rychlost, stoupání/klesání a výška nad zemí na společné časové ose |
+| **Letový i blokový čas** | Vzlet→přistání a zvlášť vyjetí→zastavení, včetně pojíždění |
+| **Barometr + akcelerometr** | Výška nad zemí a stoupání z tlakoměru, mnohem tišší než GPS |
 | **Trasa** | Celý let bod po bodu, na mapě, export do GPX |
 | **Export** | GPX na let, CSV na celý deník |
 | **Záznam na pozadí** | S povolením polohy „Vždy“ zapisuje i se zhasnutým displejem |
@@ -138,6 +142,84 @@ není.
 
 ---
 
+## Mapa a graf za letu
+
+Mapa nekreslí trasu až v hotovém letu — kreslí ji průběžně, od chvíle, kdy
+zapneš záznam. Vidíš tedy i pojíždění, ne jen let. Karta na hlavní obrazovce se
+rozklikne na celou obrazovku, kde jsou přes mapu jen tři čísla: GS, AGL a
+stoupání.
+
+Pod mapou je graf se třemi pruhy na společné časové ose:
+
+- **rychlost** (kt),
+- **stoupání/klesání** (fpm, s nulovou linkou),
+- **výška nad zemí** (ft).
+
+Tři pruhy místo jednoho grafu proto, že uzel, stopa za minutu a stopa spolu
+nemají co dělat — každá čára si tak drží vlastní rozsah a čitelnost, a časová
+osa pořád dovolí přiložit „tady začalo stoupání" k „tady spadla rychlost".
+
+Kreslí se z **zředěné** kopie trasy: na disk jde záznam v plné sekundové
+hustotě, ale pro vykreslení se drží strop 1500 bodů. Když se naplní, zahodí se
+každý druhý bod a jede se na poloviční hustotě. Trasa si udrží tvar i oba konce,
+ztratí se jen detail, který stejně na displeji telefonu nikdo nerozliší.
+
+Jedna věc na rovinu: **dlaždice Apple map potřebují signál.** Ve vzduchu
+většinou není, takže čekej prázdnou mřížku. Trasa se na ni ale kreslí dál —
+čára je ze zapisovače, ne z mapy. Co si telefon stáhl na zemi, zůstane
+dostupné.
+
+---
+
+## Letový a blokový čas
+
+Deník chce obě čísla a jedno z druhého nespočítáš:
+
+- **doba letu** — odlepení kol až dosednutí,
+- **blokový čas** — od chvíle, kdy se letadlo poprvé rozjede, do chvíle, kdy
+  definitivně zastaví. Pojíždění na obou koncích včetně.
+
+Aplikace detekuje obojí zvlášť. Rozjezd se potvrzuje 10 s nad 4 kt, zastavení
+**45 s** pod 1,5 kt — ta dlouhá prodleva je schválně: **stání před dráhou není
+konec letu.** Pojíždění bez letu (přetažení do hangáru) vyrobí jen dvojici
+blokových událostí a žádný let; ta se zahodí.
+
+V deníku pak vidíš u každého letu obojí, v souhrnu nalétané hodiny i blok, a
+v CSV exportu jsou sloupce `off_blocks`, `on_blocks`, `blokovy_cas` a
+`pojizdeni`.
+
+---
+
+## Barometr a akcelerometr
+
+Chtěl jsi akcelerometr. Přidal jsem ho — ale rovnou říkám, že **ten senzor, co
+tomu opravdu pomůže, je barometr**, a je v tom stejném API.
+
+**Barometr dělá tu těžkou práci.** Výška z GPS je to nejšumivější, co přijímač
+hlásí — ±8 m je dobrý den, a detektor ji musí prokládat regresí přes šest
+sekund, jen aby z ní dostal použitelné stoupání. Tlakoměr v iPhonu rozliší
+*relativní* výšku na jednotky centimetrů a hlásí ji jednou za sekundu. Nadmořskou
+výšku ti neřekne — ale to po něm nikdo nechce: vynuluj ho na zemi a odpoví na
+otázku „jak vysoko nad tím místem jsem" líp než cokoli jiného v telefonu.
+Nuluje se při každém kontaktu se zemí, což zároveň řeší, aby se nenasčítal
+pomalý posun tlaku s počasím (řádově hPa za hodinu, asi 8 m).
+
+Když barometr má co měřit, má přednost před AGL z GPS a událost dostane
+značku „jistý" bez ohledu na terén.
+
+**Akcelerometr přitakává.** Telefon volně v kapse nemá známou orientaci, takže
+z něj není poctivá cesta ke zrychlení dopředu — jen k velikosti měrné síly, což
+je na orientaci nezávislé. I to stojí za to: říká, že letadlo je pod výkonem a
+v pohybu (ukazuje se na hlavní obrazovce), a hlavně **zahodí vzorek terénní
+reference vzniklý při poskakování po trávě**, aby se nepovažoval za stojící
+letadlo.
+
+Obojí je nepovinné. Starší telefon barometr nemá, uživatel může přístup k pohybu
+odmítnout — detekce běží dál, jen hruběji. Předání `nil` místo měření nechá
+detektor chovat se přesně jako dřív.
+
+---
+
 ## Voda
 
 Hydroplán, plovákový ultralight, vzlet z jezera nebo z moře. Funguje, ale dvě
@@ -222,9 +304,12 @@ flight-logger-ios/
 │   │   ├── ElevationCache.swift      mřížka terénu na disku
 │   │   ├── OnlineElevationClient.swift
 │   │   ├── SyntheticTrack.swift      generátor umělých tras
+│   │   ├── MotionSample.swift        barometr + akcelerometr, reference tlaku
+│   │   ├── TrackBuffer.swift         zředěná kopie trasy pro vykreslení
 │   │   └── GeoMath.swift             haversine, regrese, medián, jednotky
 │   ├── Services/                 # I/O vrstva
 │   │   ├── LocationService.swift     CoreLocation → Fix
+│   │   ├── MotionService.swift       CoreMotion → MotionSample
 │   │   ├── FlightRecorder.swift      lepí to dohromady
 │   │   ├── FlightStore.swift         deník + trasy + export
 │   │   ├── AppSettings.swift
@@ -271,6 +356,14 @@ Poctivě, protože to není jedno:
 
 **Ověřené:**
 
+- Blokové časy na pěti scénářích: celý let vyrobí čtyři události ve správném
+  pořadí, blok je delší než let, událost je orazítkovaná zpětně, stání před
+  dráhou blok neukončí, a pojíždění bez letu nevyrobí žádný vzlet.
+- Fúze se senzory: barometrická výška detekuje let i bez jakýchkoli dat o terénu,
+  prázdné měření nezmění chování ani o vteřinu, a rozhýbaný telefon nesmí
+  definovat zem.
+- Ořezávání trasy pro vykreslení: strop se drží, oba konce trasy přežijí,
+  pořadí sedí.
 - Pravidlo pro sběr reference terénu (pojíždění ano, let ne, vis vrtulníku ne,
   drift hydroplánu ano) a párování vodních ploch přes celé jezero.
 - Logika detekce na 11 scénářích — standardní let, letiště ve 2000 m, bez dat o

@@ -140,7 +140,8 @@ enum SyntheticTrack {
                 .init(duration: 30, speedFrom: Units.knotsToMps(70), speedTo: Units.knotsToMps(55),
                       climbFrom: -3, climbTo: 0),                                                   // flare
                 .init(duration: 25, speedFrom: Units.knotsToMps(55), speedTo: Units.knotsToMps(8)), // rollout
-                .init(duration: 90, speed: Units.knotsToMps(8))                                     // taxi in
+                .init(duration: 90, speed: Units.knotsToMps(8)),                                    // taxi in
+                .init(duration: 60, speed: 0)                                                       // parked
             ]
         )
     }
@@ -175,7 +176,8 @@ enum SyntheticTrack {
                 .init(duration: 25, speedFrom: Units.knotsToMps(70), speedTo: Units.knotsToMps(55),
                       climbFrom: -1.8, climbTo: 0),
                 .init(duration: 25, speedFrom: Units.knotsToMps(55), speedTo: Units.knotsToMps(8)),
-                .init(duration: 60, speed: Units.knotsToMps(8))
+                .init(duration: 60, speed: Units.knotsToMps(8)),
+                .init(duration: 60, speed: 0)
             ]
         )
     }
@@ -196,7 +198,8 @@ enum SyntheticTrack {
                 .init(duration: 20, speedFrom: Units.knotsToMps(10), speedTo: Units.knotsToMps(60)),
                 .init(duration: 30, speed: Units.knotsToMps(60)),   // above rotate speed, still rolling
                 .init(duration: 25, speedFrom: Units.knotsToMps(60), speedTo: Units.knotsToMps(10)),
-                .init(duration: 60, speed: Units.knotsToMps(10))
+                .init(duration: 60, speed: Units.knotsToMps(10)),
+                .init(duration: 60, speed: 0)
             ]
         )
     }

@@ -57,7 +57,8 @@ def median(vs):
 
 class Profile:
     def __init__(self, name, to_kt, ld_kt, air_agl, gnd_agl, climb, confirm,
-                 max_hacc=50, tng=60, climb_window=6, ref_radius=15000):
+                 max_hacc=50, tng=60, climb_window=6, ref_radius=15000,
+                 moving_kt=4, stopped_kt=1.5, moving_confirm=10, stopped_confirm=45):
         self.name = name
         self.takeoffSpeed = to_kt*KT
         self.landingSpeed = ld_kt*KT
@@ -69,12 +70,16 @@ class Profile:
         self.touchAndGoWindow = tng
         self.climbWindow = climb_window
         self.referenceValidRadius = ref_radius
+        self.movingSpeed = moving_kt * KT
+        self.stoppedSpeed = stopped_kt * KT
+        self.movingConfirm = moving_confirm
+        self.stoppedConfirm = stopped_confirm
 
 
 GLIDER = Profile("Kluzák", 25, 18, 25, 12, 0.5, 5)
 ULTRALIGHT = Profile("Ultralight", 30, 22, 30, 15, 0.5, 5)
 PISTON = Profile("Motorové (píst)", 45, 32, 40, 18, 0.6, 5)
-TURBINE = Profile("Turbína", 70, 50, 60, 25, 1.0, 6, 60, 90, 8, 25000)
+TURBINE = Profile("Turbína", 70, 50, 60, 25, 1.0, 6, 60, 90, 8, 25000, 5, 2, 12, 60)
 
 
 class Fix:
@@ -151,6 +156,7 @@ def standard_flight(origin=(49.9, 15.0), elev=250, start=1_700_000_000):
         Seg(30, speedFrom=70*KT, speedTo=55*KT, climbFrom=-3, climbTo=0),
         Seg(25, speedFrom=55*KT, speedTo=8*KT),
         Seg(90, speed=8*KT),
+        Seg(60, speed=0),
     ])
 
 
@@ -171,6 +177,7 @@ def touch_and_go(origin=(49.9, 15.0), elev=250, start=1_700_000_000):
         Seg(25, speedFrom=70*KT, speedTo=55*KT, climbFrom=-1.8, climbTo=0),
         Seg(25, speedFrom=55*KT, speedTo=8*KT),
         Seg(60, speed=8*KT),
+        Seg(60, speed=0),
     ])
 
 
@@ -181,6 +188,7 @@ def fast_taxi(origin=(49.9, 15.0), elev=250, start=1_700_000_000):
         Seg(30, speed=60*KT),
         Seg(25, speedFrom=60*KT, speedTo=10*KT),
         Seg(60, speed=10*KT),
+        Seg(60, speed=0),
     ])
 
 
@@ -204,6 +212,9 @@ class Detector:
         self.air_since = None
         self.gnd_since = None
         self.touch_since = None
+        self.is_moving = False
+        self.moving_since = None
+        self.stopped_since = None
         self.seen_ground = False
         self.seen_air = False
 
@@ -219,6 +230,8 @@ class Detector:
                 self.air_since = None
                 self.gnd_since = None
                 self.touch_since = None
+                self.moving_since = None
+                self.stopped_since = None
                 self.phase = "unknown"
                 self.seen_ground = False
                 self.seen_air = False
@@ -237,7 +250,42 @@ class Detector:
             self.seen_ground = True
         if self.looks_airborne(s):
             self.seen_air = True
-        return self.advance(s)
+        return self.advance(s) + self.advance_blocks(s)
+
+    def advance_blocks(self, s):
+        if s.speed >= self.p.movingSpeed:
+            if self.moving_since is None:
+                self.moving_since = s.fix.t
+            self.stopped_since = None
+        elif 0 <= s.speed <= self.p.stoppedSpeed:
+            if self.stopped_since is None:
+                self.stopped_since = s.fix.t
+            self.moving_since = None
+        else:
+            self.moving_since = None
+            self.stopped_since = None
+
+        if not self.is_moving and self.moving_since is not None \
+                and s.fix.t - self.moving_since >= self.p.movingConfirm:
+            self.is_moving = True
+            since = self.moving_since
+            self.moving_since = None
+            return [self.event("offBlocks", self.index_at_or_after(since))]
+
+        if self.is_moving and self.stopped_since is not None \
+                and s.fix.t - self.stopped_since >= self.p.stoppedConfirm:
+            self.is_moving = False
+            since = self.stopped_since
+            self.stopped_since = None
+            return [self.event("onBlocks", self.index_at_or_after(since))]
+
+        return []
+
+    def index_at_or_after(self, t):
+        for i, s in enumerate(self.buffer):
+            if s.fix.t >= t:
+                return i
+        return max(0, len(self.buffer) - 1)
 
     def advance(self, s):
         if self.looks_airborne(s):

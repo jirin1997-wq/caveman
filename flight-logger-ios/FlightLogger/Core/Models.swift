@@ -103,13 +103,24 @@ struct ElevationSample: Codable, Equatable, Sendable {
 enum FlightEventKind: String, Codable, Sendable {
     case takeoff
     case landing
+    /// The aircraft started moving under its own power. Block time starts here,
+    /// which is what a logbook's block-to-block column means.
+    case offBlocks
+    /// The aircraft came to a stop and stayed stopped. Block time ends.
+    case onBlocks
 
     var label: String {
         switch self {
         case .takeoff: return "Vzlet"
         case .landing: return "Přistání"
+        case .offBlocks: return "Vyjetí"
+        case .onBlocks: return "Zastavení"
         }
     }
+
+    /// Wheels-off and wheels-on are the pair that bound flight time; the other
+    /// two bound block time.
+    var isAirEvent: Bool { self == .takeoff || self == .landing }
 }
 
 /// How much the detector trusts an event.
@@ -173,6 +184,10 @@ struct Flight: Codable, Equatable, Identifiable, Sendable {
     var id: UUID = UUID()
     var takeoff: FlightEvent
     var landing: FlightEvent?
+    /// When the aircraft started moving, and when it finally stopped. Optional
+    /// because a flight the app joined late has no off-blocks to claim.
+    var offBlocks: FlightEvent?
+    var onBlocks: FlightEvent?
     var aircraft: String?
     /// Ground time before this takeoff was under `touchAndGoWindow`, i.e. the
     /// aircraft never really stopped after the previous landing.
@@ -190,10 +205,34 @@ struct Flight: Codable, Equatable, Identifiable, Sendable {
 
     var isOpen: Bool { landing == nil }
 
-    /// Wheels-off to wheels-on. Nil while the flight is still open.
+    /// Wheels-off to wheels-on — flight time. Nil while the flight is open.
     var duration: TimeInterval? {
         guard let landing else { return nil }
         return landing.time.timeIntervalSince(takeoff.time)
+    }
+
+    /// Off-blocks to on-blocks — block time, the longer of the two. Nil until
+    /// both ends are known.
+    var blockTime: TimeInterval? {
+        guard let offBlocks, let onBlocks else { return nil }
+        return onBlocks.time.timeIntervalSince(offBlocks.time)
+    }
+
+    /// Taxi out, taxi in, and the two added together. Everything the aircraft
+    /// spent moving on the ground for this flight.
+    var taxiOut: TimeInterval? {
+        guard let offBlocks else { return nil }
+        return takeoff.time.timeIntervalSince(offBlocks.time)
+    }
+
+    var taxiIn: TimeInterval? {
+        guard let landing, let onBlocks else { return nil }
+        return onBlocks.time.timeIntervalSince(landing.time)
+    }
+
+    var taxiTime: TimeInterval? {
+        guard let out = taxiOut, let back = taxiIn else { return taxiOut ?? taxiIn }
+        return out + back
     }
 
     var departureLabel: String { takeoff.airport ?? Units.coordinateLabel(takeoff.coordinate) }
@@ -217,13 +256,17 @@ struct TrackPoint: Codable, Equatable, Sendable {
     var agl: Double?
     /// Ground speed, m/s.
     var spd: Double
+    /// Vertical speed, m/s. Optional so tracks recorded before it existed still
+    /// decode.
+    var vs: Double?
 
-    init(fix: Fix, agl: Double?, speed: Double) {
+    init(fix: Fix, agl: Double?, speed: Double, vs: Double? = nil) {
         self.t = fix.timestamp
         self.lat = fix.latitude
         self.lon = fix.longitude
         self.alt = fix.altitude
         self.agl = agl
         self.spd = speed
+        self.vs = vs
     }
 }

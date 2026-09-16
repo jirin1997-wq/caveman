@@ -17,7 +17,10 @@ struct LiveView: View {
                 VStack(spacing: 16) {
                     phaseBanner
                     readouts
+                    mapCard
+                    graphCard
                     terrainCard
+                    sensorCard
                     if let flight = recorder.currentFlight {
                         currentFlightCard(flight)
                     }
@@ -57,6 +60,7 @@ struct LiveView: View {
         switch recorder.snapshot.phase {
         case .unknown: return .gray
         case .onGround: return .blue
+        case .taxi: return .teal
         case .takeoffRoll: return .orange
         case .airborne: return .green
         case .approach: return .orange
@@ -98,6 +102,96 @@ struct LiveView: View {
             .padding(12)
             .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
         }
+    }
+
+    // MARK: - Map and graph
+
+    /// The track being drawn while it is recorded. Tapping opens it full size.
+    private var mapCard: some View {
+        NavigationLink {
+            LiveMapView()
+        } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                LiveTrackMap(
+                    track: recorder.liveTrack.points,
+                    follow: true,
+                    departure: recorder.currentFlight?.takeoff.coordinate
+                )
+                .frame(height: 170)
+                .allowsHitTesting(false)
+
+                HStack {
+                    Label("Trasa", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                    Spacer()
+                    Text(trackSummary)
+                    Image(systemName: "chevron.right").font(.caption2)
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+            }
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var trackSummary: String {
+        let count = recorder.liveTrack.points.count
+        guard count > 1 else { return "čekám na fixy" }
+        guard let flight = recorder.currentFlight else { return "\(count) bodů" }
+        return "\(count) bodů · \(Units.distanceLabel(flight.distance))"
+    }
+
+    private var graphCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("PRŮBĚH LETU")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            FlightGraph(points: recorder.liveTrack.points)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(13)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// What the phone's own sensors are adding. Worth showing, because it is
+    /// the difference between a jittery AGL and a solid one.
+    private var sensorCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label("Senzory telefonu", systemImage: "gauge.with.dots.needle.bottom.50percent")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(recorder.motionService.hasBarometer ? "barometr" : "bez barometru")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        (recorder.motionService.hasBarometer ? Color.green : Color.secondary).opacity(0.18),
+                        in: Capsule()
+                    )
+                    .foregroundStyle(recorder.motionService.hasBarometer ? Color.green : Color.secondary)
+            }
+            Text(sensorLine)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var sensorLine: String {
+        if recorder.motionService.baroZeroed {
+            let g = recorder.motion.acceleration.map { String(format: "%.2f g", $0) } ?? "—"
+            return "Výška nad zemí měřená barometrem od poslední zastávky. Zrychlení \(g)."
+        }
+        if recorder.motionService.hasBarometer {
+            return "Barometr se vynuluje, až letadlo chvíli postojí. Do té doby jede AGL z GPS."
+        }
+        return "Tento telefon nemá barometr — AGL se počítá z GPS a terénu."
     }
 
     // MARK: - Terrain
@@ -149,9 +243,14 @@ struct LiveView: View {
             // Ticks once a second so the airborne time is live, not frozen at
             // whatever moment SwiftUI last redrew the view.
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text("Ve vzduchu \(Units.durationLabel(context.date.timeIntervalSince(flight.takeoff.time))) · \(Units.distanceLabel(flight.distance))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Let \(Units.durationLabel(context.date.timeIntervalSince(flight.takeoff.time))) · \(Units.distanceLabel(flight.distance))")
+                    if let offBlocks = flight.offBlocks {
+                        Text("Blok \(Units.durationLabel(context.date.timeIntervalSince(offBlocks.time))) · pojíždění \(Units.durationLabel(flight.taxiOut))")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

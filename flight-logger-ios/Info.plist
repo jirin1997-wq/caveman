@@ -30,6 +30,8 @@
 	<array>
 		<string>location</string>
 	</array>
+	<key>NSMotionUsageDescription</key>
+	<string>Barometr a akcelerometr zpřesňují výšku nad zemí a stoupání — mnohem méně šumu než z GPS. Bez nich aplikace funguje dál, jen hruběji.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Podle polohy a výšky se pozná vzlet a přistání. Bez polohy aplikace nic nezaznamená.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
