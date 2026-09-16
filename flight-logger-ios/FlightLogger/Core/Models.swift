@@ -129,6 +129,17 @@ enum EventConfidence: String, Codable, Sendable {
     }
 }
 
+extension EventConfidence {
+    /// Confidence in an event, which is really confidence in the terrain number
+    /// the decision rested on. No AGL at all is `.low`; a measured ground
+    /// reference or a published field elevation is `.high`; a map lookup sits
+    /// in between.
+    static func forTerrain(_ sample: ElevationSample?, agl: Double?) -> EventConfidence {
+        guard agl != nil, let sample else { return .low }
+        return sample.source.rank >= ElevationSource.airport.rank ? .high : .medium
+    }
+}
+
 struct FlightEvent: Codable, Equatable, Identifiable, Sendable {
     var id: UUID = UUID()
     var kind: FlightEventKind

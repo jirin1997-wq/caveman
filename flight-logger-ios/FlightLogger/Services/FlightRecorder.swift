@@ -43,7 +43,10 @@ final class FlightRecorder: ObservableObject {
         self.store = store
         self.settings = settings
         self.location = location
-        self.airports = AirportDatabase.loadDefault(userDirectory: AppPaths.root)
+        // Held in a local first: Swift will not let an initializer read back a
+        // stored property until every one of them has a value.
+        let airports = AirportDatabase.loadDefault(userDirectory: AppPaths.root)
+        self.airports = airports
         self.elevationProvider = CombinedElevationProvider(
             airports: airports,
             cache: ElevationCache(directory: AppPaths.root)
@@ -234,11 +237,15 @@ final class FlightRecorder: ObservableObject {
         if let last = lastTrackPoint, fix.timestamp.timeIntervalSince(last.t) < trackInterval { return }
 
         let point = TrackPoint(fix: fix, agl: agl, speed: speed)
-        if let last = lastTrackPoint, var flight = currentFlight {
-            flight.distance += GeoMath.distance(
-                Coordinate(latitude: last.lat, longitude: last.lon),
-                fix.coordinate
-            )
+        if var flight = currentFlight {
+            // Distance needs a previous point; the maxima and the count do not,
+            // so they must not sit behind the same condition.
+            if let last = lastTrackPoint {
+                flight.distance += GeoMath.distance(
+                    Coordinate(latitude: last.lat, longitude: last.lon),
+                    fix.coordinate
+                )
+            }
             flight.maxAltitude = max(flight.maxAltitude, fix.altitude)
             flight.maxSpeed = max(flight.maxSpeed, max(0, speed))
             if let agl {
@@ -278,21 +285,25 @@ final class FlightRecorder: ObservableObject {
     func logManualEvent(_ kind: FlightEventKind) {
         guard let fix = location.lastFix else { return }
         let sample = elevationProvider.bestEffort(at: fix.coordinate, now: fix.timestamp)
-        var event = FlightEvent(
-            kind: kind,
-            time: fix.timestamp,
-            latitude: fix.latitude,
-            longitude: fix.longitude,
-            altitude: fix.altitude,
-            agl: sample.map { fix.altitude - $0.meters },
-            groundElevation: sample?.meters,
-            elevationSource: sample?.source ?? .unavailable,
-            speed: max(0, fix.speed),
-            confidence: .high,
-            airport: nil
+        let agl = sample.map { fix.altitude - $0.meters }
+        // The pilot is sure it happened; confidence describes the terrain
+        // evidence behind the numbers, exactly as it does for a detected event.
+        // `handle` names the airfield.
+        handle(
+            FlightEvent(
+                kind: kind,
+                time: fix.timestamp,
+                latitude: fix.latitude,
+                longitude: fix.longitude,
+                altitude: fix.altitude,
+                agl: agl,
+                groundElevation: sample?.meters,
+                elevationSource: sample?.source ?? .unavailable,
+                speed: max(0, fix.speed),
+                confidence: EventConfidence.forTerrain(sample, agl: agl),
+                airport: nil
+            )
         )
-        event.airport = airports.nearest(to: event.coordinate)?.airport.code
-        handle(event)
     }
 
     // MARK: - Simulation

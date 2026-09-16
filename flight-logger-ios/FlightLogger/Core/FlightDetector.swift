@@ -302,14 +302,7 @@ final class FlightDetector {
     private func makeEvent(kind: FlightEventKind, at index: Int) -> FlightEvent {
         let s = buffer[max(0, min(index, buffer.count - 1))]
         let source = s.elevation?.source ?? .unavailable
-        // Confidence describes the terrain evidence, not the event: with a
-        // solid elevation the AGL numbers behind the decision are solid too.
-        let confidence: EventConfidence
-        if s.agl == nil {
-            confidence = .low
-        } else {
-            confidence = source.rank >= ElevationSource.airport.rank ? .high : .medium
-        }
+        let confidence = EventConfidence.forTerrain(s.elevation, agl: s.agl)
         return FlightEvent(
             kind: kind,
             time: s.fix.timestamp,

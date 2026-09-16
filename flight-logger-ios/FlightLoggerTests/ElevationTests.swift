@@ -218,6 +218,22 @@ final class ElevationTests: XCTestCase {
         XCTAssertEqual(db.learned.count, 2)
     }
 
+    // MARK: - Confidence
+
+    /// One rule, used by the detector and by manual entries alike.
+    func testConfidenceFollowsTheTerrainSource() {
+        let reference = ElevationSample(meters: 250, source: .groundReference)
+        let field = ElevationSample(meters: 250, source: .airport)
+        let cached = ElevationSample(meters: 250, source: .cache)
+
+        XCTAssertEqual(EventConfidence.forTerrain(reference, agl: 40), .high)
+        XCTAssertEqual(EventConfidence.forTerrain(field, agl: 40), .high)
+        XCTAssertEqual(EventConfidence.forTerrain(cached, agl: 40), .medium)
+        // No AGL means the decision never saw the terrain at all.
+        XCTAssertEqual(EventConfidence.forTerrain(nil, agl: nil), .low)
+        XCTAssertEqual(EventConfidence.forTerrain(reference, agl: nil), .low)
+    }
+
     // MARK: - Cache
 
     func testCacheRoundTripsWithinAGridSquare() {

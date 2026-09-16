@@ -280,6 +280,11 @@ Poctivě, protože to není jedno:
   Kontrola běžela přes `tools/detector-reference.py` — řádek po řádku přepis
   téhož stavového automatu do Pythonu, protože na Linuxu není Swift.
   **Zdroj pravdy je Swift; ten Python soubor je jen kontrola.**
+- Statická kontrola Swiftu místo kompilátoru: každé volání v modulu proti
+  deklaraci (argumentové labely, počty parametrů) a každý použitý typ proti
+  deklarovaným. Našlo to jednu skutečnou chybu — inicializátor `FlightRecorder`
+  četl vlastní property dřív, než byly všechny nastavené, což Swift nepustí.
+  Opraveno.
 - `FlightLogger.xcodeproj` se načte parserem projektových souborů — obě cíle,
   všechny odkazy sedí, `objectVersion 77`.
 - `Info.plist` je validní plist se správnými klíči.
@@ -291,8 +296,9 @@ Poctivě, protože to není jedno:
 **Neověřené:**
 
 - **Swift se nikde nezkompiloval.** V prostředí, kde tohle vzniklo, není
-  toolchain a stažení blokuje síťová politika. První `⌘B` v Xcode může vyhodit
-  překlepy.
+  toolchain a stažení blokuje síťová politika. Statické kontroly výš pokryjí
+  labely, typy a párování závorek, ale ne typovou kontrolu ani dostupnost API —
+  první `⌘B` v Xcode může pořád něco vyhodit.
 - Chování CoreLocation na skutečném zařízení — přesnost, frekvence fixů, jak se
   chová záznam na pozadí za letu.
 - Endpoint Open-Meteo se nedal zavolat (blokovaná síť). Klient je psaný podle
