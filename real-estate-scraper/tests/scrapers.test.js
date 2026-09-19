@@ -1,6 +1,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseListPage as parseSreality } from '../backend/scrapers/sreality.js';
+import {
+  parseListPage as parseSreality,
+  localitiesFromState,
+  addressFromLocality,
+  balancedObject
+} from '../backend/scrapers/sreality.js';
 import { parseListPage as parseIdnes, localityFromHref } from '../backend/scrapers/idnes.js';
 import { parseListPage as parseBezrealitky } from '../backend/scrapers/bezrealitky.js';
 
@@ -155,5 +160,89 @@ describe('Bezrealitky — parseListPage', () => {
 
   test('omezení na jedno město funguje', () => {
     assert.deepEqual(parseBezrealitky(BEZREALITKY, ['praha']), []);
+  });
+});
+
+// Tvar vloženého JSONu opsaný z živého výpisu Sreality (běh „Průzkum
+// zdrojů" 2026-09-19). Renderují stránku z dat, která do ní zároveň vloží.
+const SREALITY_STATE = `<html><body>
+<ul>
+  <li id="estate-list-item-397267020">
+    <a href="/detail/prodej/byt/2+1/praha-cakovice-schoellerova/397267020"><img src="a.jpg"></a>
+    <div><p>Prodej bytu 2+1 77 m²</p><p>Praha 9</p><p>12&nbsp;646&nbsp;295&nbsp;Kč</p></div>
+  </li>
+  <li id="estate-list-item-111222333">
+    <a href="/detail/prodej/byt/1+kk/praha-zizkov-x/111222333"><img src="b.jpg"></a>
+    <div><p>Prodej bytu 1+kk 30 m²</p><p>Praha 3</p><p>5&nbsp;000&nbsp;000&nbsp;Kč</p></div>
+  </li>
+</ul>
+<script>window.__DATA__={"results":[
+{"id":397267020,"hasVideo":false,"images":[{"url":"//x/1.jpeg"}],"locality":{"city":"Praha","cityPart":"Čakovice","district":"Praha 9","latitude":50.1576102,"longitude":14.524825,"street":"Schoellerova","streetNumber":"28","houseNumber":"936"},"name":"Prodej bytu 2+1 77 m²","priceCzk":12646295},
+{"id":111222333,"hasVideo":false,"locality":{"city":"Praha","cityPart":"Žižkov","district":"Praha 3","latitude":50.0811,"longitude":14.4501,"street":"Seifertova","streetNumber":null},"priceCzk":5000000}
+]};</script>
+</body></html>`;
+
+describe('Sreality — poloha z vloženého JSONu', () => {
+  test('spáruje souřadnice s inzerátem podle id', () => {
+    const map = localitiesFromState(SREALITY_STATE);
+    assert.equal(map.get('397267020').latitude, 50.1576102);
+    assert.equal(map.get('111222333').longitude, 14.4501);
+  });
+
+  test('parseListPage doplní souřadnice do inzerátu', () => {
+    const [first, second] = parseSreality(SREALITY_STATE, 'praha');
+    assert.equal(first.lat, 50.1576102);
+    assert.equal(first.lng, 14.524825);
+    assert.equal(second.lat, 50.0811);
+  });
+
+  test('adresa z JSONu je přesnější než z karty — nese ulici a číslo', () => {
+    const [first] = parseSreality(SREALITY_STATE, 'praha');
+    assert.equal(first.locality, 'Schoellerova 28, Praha 9 - Čakovice');
+  });
+
+  test('chybějící číslo popisné adresu neshodí', () => {
+    assert.equal(
+      addressFromLocality({ street: 'Seifertova', district: 'Praha 3', cityPart: 'Žižkov' }),
+      'Seifertova, Praha 3 - Žižkov'
+    );
+  });
+
+  test('když se čtvrť rovná městské části, nezdvojí se', () => {
+    assert.equal(
+      addressFromLocality({ street: 'Na Bělidle', district: 'Praha 5', cityPart: 'Praha 5' }),
+      'Na Bělidle, Praha 5'
+    );
+  });
+
+  test('výpis bez vloženého JSONu projde bez souřadnic', () => {
+    const [first] = parseSreality(SREALITY, 'praha');
+    assert.equal(first.lat, null);
+    assert.ok(first.price);
+  });
+});
+
+describe('balancedObject', () => {
+  test('vyřízne objekt i s vnořenými závorkami', () => {
+    const text = 'xx{"a":{"b":1},"c":2}yy';
+    assert.equal(balancedObject(text, 2), '{"a":{"b":1},"c":2}');
+  });
+
+  test('závorka uvnitř textové hodnoty objekt neukončí', () => {
+    const text = '{"popis":"byt } s balkonem","a":1}';
+    assert.equal(balancedObject(text, 0), text);
+  });
+
+  test('escapovaná uvozovka nerozhodí hledání konce řetězce', () => {
+    const text = '{"popis":"řekl \\"ano\\" }","a":1}';
+    assert.equal(balancedObject(text, 0), text);
+  });
+
+  test('neuzavřený objekt vrátí null místo nesmyslu', () => {
+    assert.equal(balancedObject('{"a":1', 0), null);
+  });
+
+  test('pozice mimo začátek objektu vrátí null', () => {
+    assert.equal(balancedObject('abc', 0), null);
   });
 });

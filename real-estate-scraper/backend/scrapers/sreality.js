@@ -44,11 +44,101 @@ const HINT = 'Ověř tvar stránky: `npm run discover` — vypíše, kde na výp
 const CARD = 'li[id^="estate-list-item"], li[id^="region-tip-item"]';
 
 /**
+ * Vyřízne z textu vyvážený objekt `{…}` začínající na dané pozici.
+ *
+ * Řetězce se přeskakují i s escapováním — bez toho by závorka uvnitř
+ * textové hodnoty ukončila objekt na špatném místě.
+ */
+export function balancedObject(text, start) {
+  if (text[start] !== '{') return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+
+    if (ch === '"') inString = true;
+    else if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Poloha jednotlivých inzerátů z JSONu vloženého do výpisu.
+ *
+ * Sreality renderují stránku z dat, která do ní zároveň vloží — a je v nich
+ * víc, než co stojí na kartě: souřadnice, ulice s číslem popisným i městská
+ * část zvlášť. Souřadnice jinak nemáme odkud vzít, protože jejich detail
+ * zacyklí přesměrování.
+ *
+ * Objekt polohy stojí v záznamu až za `id`, takže se hledá nejbližší
+ * předcházející identifikátor. Kdyby Sreality pořadí klíčů změnily,
+ * mapa vyjde prázdná a scraper poběží dál bez souřadnic — proto se
+ * pokrytí hlásí do logu.
+ */
+export function localitiesFromState(html) {
+  const text = String(html || '');
+  const byId = new Map();
+
+  for (const match of text.matchAll(/"locality"\s*:\s*\{/g)) {
+    const json = balancedObject(text, match.index + match[0].length - 1);
+    if (!json) continue;
+
+    let locality;
+    try {
+      locality = JSON.parse(json);
+    } catch {
+      continue;
+    }
+    if (!Number.isFinite(locality?.latitude)) continue;
+
+    const before = text.slice(Math.max(0, match.index - 8000), match.index);
+    const ids = [...before.matchAll(/"id"\s*:\s*(\d{6,})/g)];
+    if (ids.length === 0) continue;
+
+    byId.set(ids[ids.length - 1][1], locality);
+  }
+
+  return byId;
+}
+
+/** Adresa z objektu polohy: „Schoellerova 28, Praha 9 - Čakovice". */
+export function addressFromLocality(locality) {
+  if (!locality) return null;
+
+  const street = [locality.street, locality.streetNumber].filter(Boolean).join(' ');
+  const area = [locality.district, locality.cityPart]
+    .filter((part, i, all) => part && all.indexOf(part) === i)
+    .join(' - ');
+
+  return [street, area || locality.city].filter(Boolean).join(', ') || null;
+}
+
+/** Identifikátor inzerátu z `id` karty nebo z adresy detailu. */
+const idFromCard = (cardId, href) =>
+  cardId?.match(/(\d{6,})$/)?.[1] || String(href).match(/(\d{6,})\/?$/)?.[1] || null;
+
+/**
  * Rozebere jednu stránku výpisu.
  * Čistá funkce nad HTML — testuje se bez sítě.
  */
 export function parseListPage(html, city) {
   const $ = cheerio.load(html);
+  const localities = localitiesFromState(html);
   const listings = [];
 
   $(CARD).each((_, el) => {
@@ -65,13 +155,19 @@ export function parseListPage(html, city) {
     const price = priceFromText(card.text());
     if (!price) return;
 
+    // Adresa z vloženého JSONu je přesnější než ta na kartě — nese ulici
+    // s číslem popisným. Když chybí, zbývá text karty.
+    const locality = localities.get(idFromCard(card.attr('id'), href));
+
     listings.push({
       url: new URL(href, 'https://www.sreality.cz').href,
       name: paragraphs.find((t) => /m²|Prodej|Pronájem/i.test(t)) || paragraphs[0] || null,
       price,
       sizeM2: areaFromCard($, card),
       disposition: dispositionFromCard($, card),
-      locality: localityFromCard($, card),
+      locality: addressFromLocality(locality) || localityFromCard($, card),
+      lat: locality?.latitude ?? null,
+      lng: locality?.longitude ?? null,
       photos: [card.find('img[src]').first().attr('src')].filter(Boolean),
       city
     });
@@ -138,7 +234,14 @@ async function scrapeCity(city) {
     .map((raw) => buildListing({ ...raw, source: 'sreality', sourceName: 'Sreality', listingType: 'byt' }))
     .filter(Boolean);
 
-  console.log(`  staženo ${collected.length} inzerátů`);
+  // Souřadnice se čtou z JSONu vloženého do výpisu. Kdyby Sreality změnily
+  // pořadí klíčů nebo tvar dat, přestaly by chodit — a bez téhle řádky by
+  // to vypadalo jen jako prázdná mapa, ne jako rozbitý scraper.
+  const withGps = collected.filter((l) => l.latitude != null).length;
+  console.log(
+    `  staženo ${collected.length} inzerátů`
+      + `, se souřadnicemi ${withGps} (${Math.round((100 * withGps) / (collected.length || 1))} %)`
+  );
   const stats = await saveBatch(collected, `${city}:`);
   return { city, ok: collected.length > 0, stats };
 }
