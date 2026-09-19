@@ -5,7 +5,19 @@ import Foundation
 /// Application Support is excluded from the iCloud document picker by default.
 enum AppPaths {
 
+    /// Redirects every path below, so a test can work in a directory of its own
+    /// instead of the one real flights are kept in. Nil in the app.
+    private static var override: URL?
+
+    /// Points the app's storage somewhere else for the duration of a test.
+    /// Pass nil to go back to Application Support.
+    static func useDirectory(_ url: URL?) {
+        override = url
+        if let url { ensure(url) }
+    }
+
     static var root: URL {
+        if let override { return override }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let dir = base.appendingPathComponent("FlightLogger", isDirectory: true)

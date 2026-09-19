@@ -20,15 +20,9 @@ final class MotionService: ObservableObject {
     private let motion = CMMotionManager()
 
     private var baro = BaroReference()
+    private var rate = BaroRate()
+    private var accel = MotionWindow()
     private var lastReading: (altitude: Double, time: Date)?
-    private var smoothedClimb: Double?
-    /// ~2 s of acceleration magnitudes at 10 Hz.
-    private var accelWindow: [Double] = []
-
-    /// Climb rate is exponentially smoothed. The barometer is quiet enough that
-    /// a light touch is all it needs — heavier smoothing would just add lag to
-    /// the one signal that is supposed to be responsive.
-    private let climbSmoothing = 0.4
 
     var hasMotion: Bool { motion.isDeviceMotionAvailable }
 
@@ -69,8 +63,8 @@ final class MotionService: ObservableObject {
         motion.stopDeviceMotionUpdates()
         isRunning = false
         lastReading = nil
-        smoothedClimb = nil
-        accelWindow.removeAll()
+        rate.reset()
+        accel.reset()
         sample = MotionSample()
     }
 
@@ -99,38 +93,24 @@ final class MotionService: ObservableObject {
     // MARK: - Sensor handlers
 
     private func handleBaro(meters: Double, at time: Date) {
-        if let previous = lastReading {
-            let dt = time.timeIntervalSince(previous.time)
-            if dt > 0.2, dt < 10 {
-                let raw = (meters - previous.altitude) / dt
-                smoothedClimb = smoothedClimb.map { $0 + (raw - $0) * climbSmoothing } ?? raw
-            }
-        }
+        rate.note(meters, at: time)
         lastReading = (meters, time)
         refreshSample()
     }
 
     private func handleAcceleration(_ magnitude: Double) {
-        accelWindow.append(magnitude)
-        if accelWindow.count > 20 { accelWindow.removeFirst() }
+        accel.append(magnitude)
         refreshSample()
     }
 
     private func refreshSample() {
         var next = MotionSample()
-
         if let reading = lastReading {
             next.baroAGL = baro.height(for: reading.altitude, at: reading.time)
-            next.climbRate = smoothedClimb
+            next.climbRate = rate.rate
         }
-
-        if !accelWindow.isEmpty {
-            let mean = accelWindow.reduce(0, +) / Double(accelWindow.count)
-            next.acceleration = mean
-            let variance = accelWindow.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(accelWindow.count)
-            next.vibration = variance.squareRoot()
-        }
-
+        next.acceleration = accel.mean
+        next.vibration = accel.deviation
         if next != sample { sample = next }
     }
 }

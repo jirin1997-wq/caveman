@@ -100,3 +100,74 @@ struct BaroReference: Equatable, Sendable {
         return relativeAltitude - zero
     }
 }
+
+
+/// Barometric vertical speed from successive relative-altitude readings.
+///
+/// Pulled out of `MotionService` so it can be tested: the CoreMotion adapter
+/// around it has no logic left to get wrong, and the two rules that matter here
+/// are easy to state and easy to break. A reading that arrives after a long
+/// stall says nothing about the current climb — dividing a metre of drift by
+/// half a second of assumed gap would invent a rate the aircraft never had.
+struct BaroRate: Equatable, Sendable {
+
+    /// Readings closer together than this are noise; further apart, the
+    /// barometer stalled and the pair no longer describes one climb.
+    var minInterval: TimeInterval = 0.2
+    var maxInterval: TimeInterval = 10
+
+    /// A light exponential smoothing. The sensor is quiet enough that a heavy
+    /// filter would only add lag to the signal that has to stay responsive.
+    var smoothing = 0.4
+
+    private(set) var rate: Double?
+    private var last: (altitude: Double, time: Date)?
+
+    mutating func note(_ meters: Double, at time: Date) {
+        defer { last = (meters, time) }
+        guard let previous = last else { return }
+        let dt = time.timeIntervalSince(previous.time)
+        guard dt >= minInterval, dt <= maxInterval else { return }
+        let raw = (meters - previous.altitude) / dt
+        rate = rate.map { $0 + (raw - $0) * smoothing } ?? raw
+    }
+
+    mutating func reset() {
+        rate = nil
+        last = nil
+    }
+}
+
+/// A short rolling window of acceleration magnitudes.
+///
+/// The mean says whether the aircraft is being accelerated; the standard
+/// deviation says whether it is vibrating, which is the difference between a
+/// running aircraft and a parked one.
+struct MotionWindow: Equatable, Sendable {
+
+    private(set) var values: [Double] = []
+
+    /// Roughly two seconds at 10 Hz — long enough to average out a pothole,
+    /// short enough to notice the moment power comes on.
+    var capacity: Int = 20
+
+    mutating func append(_ magnitude: Double) {
+        values.append(magnitude)
+        if values.count > capacity { values.removeFirst(values.count - capacity) }
+    }
+
+    mutating func reset() { values.removeAll() }
+
+    var isEmpty: Bool { values.isEmpty }
+
+    var mean: Double? {
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    var deviation: Double? {
+        guard let mean, !values.isEmpty else { return nil }
+        let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(values.count)
+        return variance.squareRoot()
+    }
+}

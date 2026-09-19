@@ -79,15 +79,22 @@ final class FlightStore: ObservableObject {
     /// leaving history stamped with a placeholder.
     func relabelAirport(from previous: String, to code: String) {
         var changed = false
+
+        // Every event carries the airfield it happened at, block events
+        // included — miss one and a renamed field stays half-renamed.
+        func relabel(_ event: inout FlightEvent?) {
+            guard event?.airport == previous else { return }
+            event?.airport = code
+            changed = true
+        }
+
         for index in flights.indices {
-            if flights[index].takeoff.airport == previous {
-                flights[index].takeoff.airport = code
-                changed = true
-            }
-            if flights[index].landing?.airport == previous {
-                flights[index].landing?.airport = code
-                changed = true
-            }
+            var takeoff: FlightEvent? = flights[index].takeoff
+            relabel(&takeoff)
+            if let takeoff { flights[index].takeoff = takeoff }
+            relabel(&flights[index].landing)
+            relabel(&flights[index].offBlocks)
+            relabel(&flights[index].onBlocks)
         }
         if changed { save() }
     }

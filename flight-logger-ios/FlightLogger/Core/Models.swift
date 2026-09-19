@@ -189,6 +189,9 @@ struct Flight: Codable, Equatable, Identifiable, Sendable {
     var offBlocks: FlightEvent?
     var onBlocks: FlightEvent?
     var aircraft: String?
+    /// Whatever the pilot wants to remember about this one. Optional so older
+    /// logbooks decode unchanged.
+    var note: String?
     /// Ground time before this takeoff was under `touchAndGoWindow`, i.e. the
     /// aircraft never really stopped after the previous landing.
     var isTouchAndGo: Bool = false

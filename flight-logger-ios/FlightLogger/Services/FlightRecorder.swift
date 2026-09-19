@@ -172,6 +172,10 @@ final class FlightRecorder: ObservableObject {
         if let known = airports.nearest(to: event.coordinate) {
             return known.airport
         }
+        // Only a takeoff or a landing is worth naming a new place for. Pushing
+        // the aircraft around the hangar apron also produces block events, and
+        // those must not each mint a "Plocha 7".
+        guard event.kind.isAirEvent else { return nil }
         guard settings.learnAirfields else { return nil }
         return airports.learn(at: event.coordinate, elevation: measuredElevation(near: event.coordinate) ?? event.groundElevation)
     }

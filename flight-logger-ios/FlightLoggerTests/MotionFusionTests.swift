@@ -73,6 +73,79 @@ final class MotionFusionTests: XCTestCase {
         XCTAssertEqual(run(withMotion: true), run(withMotion: false))
     }
 
+    // MARK: - Barometric climb rate
+
+    func testClimbRateComesOutOfSuccessiveReadings() {
+        var rate = BaroRate()
+        rate.note(0, at: start)
+        XCTAssertNil(rate.rate, "one reading is not a rate")
+
+        // Two metres a second, sampled once a second.
+        for i in 1...20 { rate.note(Double(i) * 2, at: start.addingTimeInterval(Double(i))) }
+        XCTAssertEqual(rate.rate ?? 0, 2, accuracy: 0.05)
+    }
+
+    /// A reading that arrives after the sensor stalled says nothing about the
+    /// current climb. Dividing the drift that accumulated over a minute by an
+    /// assumed one-second gap would invent a rate the aircraft never had.
+    func testAStalledSensorDoesNotInventAClimb() {
+        var rate = BaroRate()
+        rate.note(0, at: start)
+        rate.note(60, at: start.addingTimeInterval(60))
+        XCTAssertNil(rate.rate)
+    }
+
+    func testReadingsTooCloseTogetherAreIgnored() {
+        var rate = BaroRate()
+        rate.note(0, at: start)
+        rate.note(0.01, at: start.addingTimeInterval(0.05))
+        XCTAssertNil(rate.rate, "50 ms apart is noise, not a climb")
+    }
+
+    func testSmoothingDampensASingleSpike() {
+        var rate = BaroRate()
+        for i in 0...10 { rate.note(Double(i) * 2, at: start.addingTimeInterval(Double(i))) }
+        let steady = rate.rate ?? 0
+
+        // One reading 20 m out of place.
+        rate.note(20 * 2 + 20, at: start.addingTimeInterval(11))
+        let spiked = rate.rate ?? 0
+        XCTAssertGreaterThan(spiked, steady)
+        XCTAssertLessThan(spiked, 22, "a single bad reading must not pass through whole")
+    }
+
+    func testResetForgetsEverything() {
+        var rate = BaroRate()
+        for i in 0...5 { rate.note(Double(i), at: start.addingTimeInterval(Double(i))) }
+        XCTAssertNotNil(rate.rate)
+        rate.reset()
+        XCTAssertNil(rate.rate)
+    }
+
+    // MARK: - Acceleration window
+
+    func testWindowAveragesAndMeasuresVibration() {
+        var window = MotionWindow()
+        XCTAssertNil(window.mean)
+        XCTAssertNil(window.deviation)
+
+        for _ in 0..<10 { window.append(0.2) }
+        XCTAssertEqual(window.mean ?? 0, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(window.deviation ?? 1, 0, accuracy: 1e-9, "a steady reading does not vibrate")
+
+        var shaking = MotionWindow()
+        for i in 0..<10 { shaking.append(i.isMultiple(of: 2) ? 0.1 : 0.3) }
+        XCTAssertEqual(shaking.mean ?? 0, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(shaking.deviation ?? 0, 0.1, accuracy: 1e-9)
+    }
+
+    func testWindowKeepsOnlyTheRecentPast() {
+        var window = MotionWindow(capacity: 5)
+        for i in 0..<100 { window.append(Double(i)) }
+        XCTAssertEqual(window.values.count, 5)
+        XCTAssertEqual(window.values, [95, 96, 97, 98, 99])
+    }
+
     // MARK: - Accelerometer gate
 
     func testShakenPhoneCannotDefineTheGround() {
