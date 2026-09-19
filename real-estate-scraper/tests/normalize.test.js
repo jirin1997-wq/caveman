@@ -90,10 +90,47 @@ describe('parseLocality', () => {
     });
   });
 
-  test('rozpozná brněnskou městskou část', () => {
-    const result = parseLocality('Veveří, Brno-střed');
-    assert.equal(result.district, 'Brno-střed');
-    assert.equal(result.neighborhood, 'Veveří');
+  test('pražskou část bez čísla obvodu převede na obvod', () => {
+    // Bezrealitky píšou Prahu vždycky jen názvem části, Sreality občas.
+    // Bez převodu stála celá jejich pražská nabídka mimo srovnávací
+    // skupiny ostatních zdrojů.
+    assert.deepEqual(parseLocality('Branická, Praha - Braník'), {
+      district: 'Praha 4',
+      neighborhood: 'Braník'
+    });
+    assert.equal(parseLocality('Korunní, Praha - Vinohrady').district, 'Praha 10');
+  });
+
+  test('číslo obvodu má přednost, i když adresa nese obojí', () => {
+    assert.equal(parseLocality('Murmanská, Praha 10 - Vršovice').district, 'Praha 10');
+  });
+
+  test('neznámá pražská část se nepřiřadí špatně, zůstane stranou', () => {
+    assert.equal(
+      parseLocality('Nová, Praha - Vymyšlenice').district,
+      'Praha - Vymyšlenice'
+    );
+  });
+
+  test('sjednotí zápisy brněnských městských částí napříč zdroji', () => {
+    // Každý zdroj to píše jinak, ale jde o tentýž trh. Dřív z „Brno -
+    // Černá Pole" vycházela čtvrť „Brno -" a všechny brněnské inzeráty
+    // z iDNES spadly do jednoho slepence — cenový rating je pak počítal
+    // proti mediánu celého Brna a se Sreality se neporovnaly vůbec.
+    const cast = (text) => parseLocality(text).district;
+
+    assert.equal(cast('Alešova, Brno - Černá Pole'), 'Brno-Černá Pole');
+    assert.equal(cast('Švermova, Brno-město - Bohunice'), 'Brno-Bohunice');
+    assert.equal(cast('Hlinky, Brno-město - Brno-střed'), 'Brno-střed');
+    assert.equal(cast('Veveří, Brno-střed'), 'Brno-střed');
+  });
+
+  test('Brno bez uvedené části zůstane Brnem', () => {
+    assert.equal(parseLocality('Antonína Slavíka, Brno').district, 'Brno');
+  });
+
+  test('sousedství je městská část, ne ulice', () => {
+    assert.equal(parseLocality('Alešova, Brno - Černá Pole').neighborhood, 'Černá Pole');
   });
 
   test('u neznámého tvaru vrátí poslední část jako obvod', () => {

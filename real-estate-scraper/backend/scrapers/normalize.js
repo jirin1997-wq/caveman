@@ -48,6 +48,138 @@ export function parsePrice(value) {
 }
 
 /**
+ * Pražské katastrální části a obvod, pod který spadají.
+ *
+ * Zdroje klíčují Prahu dvěma nesmiřitelnými způsoby: Sreality a iDNES
+ * většinou číslem obvodu („Praha 10"), Bezrealitky vždycky jen názvem
+ * části („Praha - Vršovice"). Cenový rating se počítá proti mediánu
+ * stejné čtvrti, takže celá pražská nabídka Bezrealitek stála stranou
+ * a s ostatními zdroji se neporovnala.
+ *
+ * Tabulka je odečtená z adres, které nesou obojí („Murmanská, Praha 10 -
+ * Vršovice"), a pokrývá všechny části, které se v datech vyskytly. Jde
+ * o správní členění, které se nemění, takže patří do kódu — ne do dat.
+ */
+const PRAHA_CASTI = new Map([
+  // Praha 1
+  ['Josefov', 1],
+  ['Malá Strana', 1],
+  ['Nové Město', 1],
+  ['Staré Město', 1],
+  // Praha 2
+  ['Nusle', 2],
+  ['Vyšehrad', 2],
+  // Praha 3
+  ['Žižkov', 3],
+  // Praha 4
+  ['Braník', 4],
+  ['Háje', 4],
+  ['Hodkovičky', 4],
+  ['Chodov', 4],
+  ['Cholupice', 4],
+  ['Kamýk', 4],
+  ['Komořany', 4],
+  ['Krč', 4],
+  ['Kunratice', 4],
+  ['Lhotka', 4],
+  ['Libuš', 4],
+  ['Modřany', 4],
+  ['Písnice', 4],
+  ['Podolí', 4],
+  ['Šeberov', 4],
+  ['Točná', 4],
+  ['Újezd u Průhonic', 4],
+  // Praha 5
+  ['Hlubočepy', 5],
+  ['Holyně', 5],
+  ['Jinonice', 5],
+  ['Košíře', 5],
+  ['Lahovice', 5],
+  ['Lipence', 5],
+  ['Lochkov', 5],
+  ['Motol', 5],
+  ['Radlice', 5],
+  ['Radotín', 5],
+  ['Řeporyje', 5],
+  ['Slivenec', 5],
+  ['Smíchov', 5],
+  ['Sobín', 5],
+  ['Stodůlky', 5],
+  ['Třebonice', 5],
+  ['Velká Chuchle', 5],
+  ['Zbraslav', 5],
+  ['Zličín', 5],
+  // Praha 6
+  ['Břevnov', 6],
+  ['Bubeneč', 6],
+  ['Dejvice', 6],
+  ['Hradčany', 6],
+  ['Liboc', 6],
+  ['Lysolaje', 6],
+  ['Přední Kopanina', 6],
+  ['Ruzyně', 6],
+  ['Řepy', 6],
+  ['Sedlec', 6],
+  ['Střešovice', 6],
+  ['Suchdol', 6],
+  ['Veleslavín', 6],
+  ['Vokovice', 6],
+  // Praha 7
+  ['Holešovice', 7],
+  ['Troja', 7],
+  // Praha 8
+  ['Bohnice', 8],
+  ['Čimice', 8],
+  ['Ďáblice', 8],
+  ['Dolní Chabry', 8],
+  ['Karlín', 8],
+  ['Kobylisy', 8],
+  ['Libeň', 8],
+  ['Střížkov', 8],
+  // Praha 9
+  ['Běchovice', 9],
+  ['Čakovice', 9],
+  ['Černý Most', 9],
+  ['Dolní Počernice', 9],
+  ['Hloubětín', 9],
+  ['Horní Počernice', 9],
+  ['Hostavice', 9],
+  ['Hrdlořezy', 9],
+  ['Kbely', 9],
+  ['Klánovice', 9],
+  ['Koloděje', 9],
+  ['Kyje', 9],
+  ['Letňany', 9],
+  ['Miškovice', 9],
+  ['Prosek', 9],
+  ['Satalice', 9],
+  ['Třeboradice', 9],
+  ['Újezd nad Lesy', 9],
+  ['Vinoř', 9],
+  ['Vysočany', 9],
+  // Praha 10
+  ['Benice', 10],
+  ['Dolní Měcholupy', 10],
+  ['Dubeč', 10],
+  ['Hájek u Uhříněvsi', 10],
+  ['Horní Měcholupy', 10],
+  ['Hostivař', 10],
+  ['Kolovraty', 10],
+  ['Královice', 10],
+  ['Malešice', 10],
+  ['Michle', 10],
+  ['Nedvězí u Říčan', 10],
+  ['Petrovice', 10],
+  ['Pitkovice', 10],
+  ['Strašnice', 10],
+  ['Štěrboholy', 10],
+  ['Uhříněves', 10],
+  ['Vinohrady', 10],
+  ['Vršovice', 10],
+  ['Záběhlice', 10],
+]);
+
+/**
  * "Murmanská, Praha 10 - Vršovice" → { district: 'Praha 10', neighborhood: 'Vršovice' }
  * Zvládne i brněnský tvar "Veveří, Brno-střed".
  */
@@ -55,6 +187,8 @@ export function parseLocality(text) {
   if (!text) return { district: null, neighborhood: null };
   const clean = String(text).trim();
 
+  // Číslo obvodu má přednost — je to tvar, kterým Prahu klíčuje většina
+  // nabídky, a nese ho i adresa, ve které stojí obojí.
   const praha = clean.match(/(Praha\s+\d+)(?:\s*[-–]\s*([^,]+))?/i);
   if (praha) {
     return {
@@ -63,14 +197,48 @@ export function parseLocality(text) {
     };
   }
 
-  const brno = clean.match(/(Brno[-\s][^\s,]+)/i);
-  if (brno) {
-    const parts = clean.split(',').map((p) => p.trim());
-    return { district: brno[1], neighborhood: parts[0] !== brno[1] ? parts[0] : null };
+  // Brno má místo číslovaných obvodů pojmenované městské části a každý
+  // zdroj je píše jinak: „Brno - Černá Pole", „Brno-město - Bohunice",
+  // „Brno-střed". Dřívější výraz z toho u prvního tvaru vyrobil čtvrť
+  // „Brno -" a do sousedství dal název ulice. Praktický dopad byl velký:
+  // celé brněnské inzeráty z iDNES spadly do jednoho slepence, Sreality
+  // do „Brno-město", a ty dva zdroje se pak navzájem nikdy neporovnaly,
+  // přestože jde o stejný trh. Cenový rating se počítá proti mediánu
+  // stejné čtvrti, takže tím trpělo jádro produktu.
+  //
+  // Okres („-město", „-venkov") se zahazuje, rozhoduje městská část.
+  const segments = clean.split(',').map((p) => p.trim()).filter(Boolean);
+  const tail = segments[segments.length - 1] || '';
+
+  // Praha bez čísla obvodu, jen s názvem části („Praha - Vršovice").
+  // Tak to píšou Bezrealitky vždycky a Sreality občas; převod na obvod
+  // je jediné, co ty inzeráty dostane do stejné srovnávací skupiny jako
+  // zbytek nabídky. Neznámou část radši necháme stranou pod vlastním
+  // klíčem, než abychom ji přiřadili špatně.
+  const prazskaCast = tail.match(/^Praha\s*[-–]\s*(.+)$/i);
+  if (prazskaCast) {
+    const part = prazskaCast[1].trim().replace(/^Praha[-\s]/i, '').trim();
+    const obvod = PRAHA_CASTI.get(part);
+    return {
+      district: obvod ? `Praha ${obvod}` : `Praha - ${part}`,
+      neighborhood: part || null
+    };
   }
 
-  const parts = clean.split(',').map((p) => p.trim()).filter(Boolean);
-  return { district: parts[parts.length - 1] || null, neighborhood: parts[0] || null };
+  const brno = tail.match(/^Brno(?:-(?:město|mesto|venkov))?\s*[-–]?\s*(.*)$/i);
+
+  if (brno) {
+    const part = brno[1].trim().replace(/^Brno[-\s]/i, '').trim();
+    return {
+      district: part ? `Brno-${part}` : 'Brno',
+      neighborhood: part || null
+    };
+  }
+
+  return {
+    district: segments[segments.length - 1] || null,
+    neighborhood: segments[0] || null
+  };
 }
 
 /** Sreality kóduje stav a materiál v textových štítcích inzerátu. */
