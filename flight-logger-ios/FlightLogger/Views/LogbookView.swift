@@ -107,6 +107,12 @@ private struct FlightRow: View {
                 .foregroundStyle(.secondary)
             }
             HStack(spacing: 6) {
+                if flight.note?.isEmpty == false {
+                    Image(systemName: "text.quote")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Má poznámku")
+                }
                 Text(flight.takeoff.time.formatted(date: .abbreviated, time: .shortened))
                 if flight.isTouchAndGo {
                     Tag(text: "touch & go", color: .purple)

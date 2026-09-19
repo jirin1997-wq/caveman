@@ -13,9 +13,14 @@ import SwiftUI
 struct FlightGraph: View {
 
     var points: [TrackPoint]
-    /// Marks a moment on the axis — the playhead while a flight is live.
+    /// Marks a moment on the axis — the playhead while a flight is live, or
+    /// whatever the pilot is currently pointing at.
     var highlight: Date?
     var laneHeight: CGFloat = 54
+    /// Set to make the lanes scrubbable. Dragging reports the moment under the
+    /// finger, which is what lets the map show where the aircraft was when the
+    /// climb started.
+    var onScrub: ((Date) -> Void)?
 
     private struct Lane {
         var title: String
@@ -54,12 +59,50 @@ struct FlightGraph: View {
         }
     }
 
+    /// While something is highlighted the lane reads out that moment, not the
+    /// end of the flight — otherwise scrubbing would move a line and change
+    /// nothing you could read.
+    private func displayed(_ lane: Lane, values: [Double?]) -> Double? {
+        guard let highlight, let index = indexNearest(to: highlight) else {
+            return values.last ?? nil
+        }
+        return values[index]
+    }
+
+    private func indexNearest(to time: Date) -> Int? {
+        guard !points.isEmpty else { return nil }
+        var best = 0
+        var bestGap = Double.greatestFiniteMagnitude
+        for (index, point) in points.enumerated() {
+            let gap = abs(point.t.timeIntervalSince(time))
+            if gap < bestGap { bestGap = gap; best = index }
+        }
+        return best
+    }
+
+    /// Turns a horizontal position into a moment on the shared time axis.
+    @ViewBuilder
+    private var scrubLayer: some View {
+        if let onScrub, let first = points.first?.t, let last = points.last?.t {
+            GeometryReader { geometry in
+                Color.clear
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                let fraction = min(1, max(0, value.location.x / max(1, geometry.size.width)))
+                                onScrub(first.addingTimeInterval(last.timeIntervalSince(first) * fraction))
+                            }
+                    )
+            }
+        }
+    }
+
     private func laneView(_ lane: Lane) -> some View {
         let values = points.map(lane.value)
         let known = values.compactMap { $0 }
         let lo = min(known.min() ?? 0, lane.baseline ?? .greatestFiniteMagnitude)
         let hi = max(known.max() ?? 1, lane.baseline ?? -.greatestFiniteMagnitude)
-        let current = values.last ?? nil
 
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline) {
@@ -67,7 +110,7 @@ struct FlightGraph: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(current.map { "\(Int($0.rounded())) \(lane.unit)" } ?? "—")
+                Text(displayed(lane, values: values).map { "\(Int($0.rounded())) \(lane.unit)" } ?? "—")
                     .font(.caption.weight(.semibold).monospacedDigit())
                     .foregroundStyle(lane.color)
             }
@@ -77,6 +120,7 @@ struct FlightGraph: View {
             }
             .frame(height: laneHeight)
             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+            .overlay { scrubLayer }
             .accessibilityLabel(
                 "\(lane.title): od \(Int(lo.rounded())) do \(Int(hi.rounded())) \(lane.unit)"
             )
@@ -151,6 +195,13 @@ struct FlightGraph: View {
             mark.move(to: CGPoint(x: x(highlight), y: 0))
             mark.addLine(to: CGPoint(x: x(highlight), y: size.height))
             context.stroke(mark, with: .color(.primary.opacity(0.35)), lineWidth: 1)
+
+            // A dot where the line actually is, so the reading above the lane
+            // has something to point at.
+            if let index = indexNearest(to: highlight), let value = values[index] {
+                let dot = CGRect(x: x(points[index].t) - 3, y: y(value) - 3, width: 6, height: 6)
+                context.fill(Path(ellipseIn: dot), with: .color(lane.color))
+            }
         }
     }
 }

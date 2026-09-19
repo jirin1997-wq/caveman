@@ -21,6 +21,8 @@ odlet. Musí platit obojí najednou.
 | **Deník** | Doba letu, odlet/přílet, max. výška, uletěná vzdálenost, nalétané hodiny |
 | **Živá mapa** | Trasa se kreslí **při letu**, ne až potom. Na celou obrazovku i jako karta |
 | **Graf průběhu** | Rychlost, stoupání/klesání a výška nad zemí na společné časové ose |
+| **Graf ↔ mapa** | Potáhnutím po grafu se na mapě ukáže, kde letadlo v tu chvíli bylo |
+| **Poznámka k letu** | Registrace a volný text, co aplikace sama vědět nemůže |
 | **Letový i blokový čas** | Vzlet→přistání a zvlášť vyjetí→zastavení, včetně pojíždění |
 | **Barometr + akcelerometr** | Výška nad zemí a stoupání z tlakoměru, mnohem tišší než GPS |
 | **Trasa** | Celý let bod po bodu, na mapě, export do GPX |
@@ -168,6 +170,19 @@ Jedna věc na rovinu: **dlaždice Apple map potřebují signál.** Ve vzduchu
 většinou není, takže čekej prázdnou mřížku. Trasa se na ni ale kreslí dál —
 čára je ze zapisovače, ne z mapy. Co si telefon stáhl na zemi, zůstane
 dostupné.
+
+---
+
+## Detail letu
+
+Mapa a graf nad sebou nejsou dvě oddělené věci. **Potáhni prstem po kterémkoli
+pruhu grafu** a na mapě naskočí značka v místě, kde letadlo v tu chvíli bylo —
+a čísla nad pruhy přepnou z konce letu na ten vybraný okamžik. Odpovídá to na
+otázku, kterou jinak z grafu nevyčteš: *kde* se to stalo, ne jen kdy.
+
+Registrace letadla a poznámka se dají dopsat ručně (tužka vpravo nahoře) —
+jsou to jediné dvě věci, které aplikace sama vědět nemůže. Označení
+touch & go si aplikace tipne sama a tady se dá opravit.
 
 ---
 
