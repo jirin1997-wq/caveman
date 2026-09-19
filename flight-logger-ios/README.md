@@ -10,6 +10,9 @@ odlet. Musí platit obojí najednou.
 
 ---
 
+> **Jak to dostat do telefonu:** [`BUILD.md`](BUILD.md) — postup v Xcode,
+> spuštění testů a seznam chyb, které u prvního buildu reálně nastanou.
+
 ## Co to umí
 
 | | |
