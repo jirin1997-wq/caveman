@@ -17,6 +17,7 @@
     "scrape:bezrealitky": "node backend/scrapers/bezrealitky.js",
     "scrape:developers": "node backend/scrapers/developers.js praha",
     "snapshot": "node backend/jobs/snapshot.js",
+    "enrich": "node backend/jobs/enrich.js",
     "db:migrate": "knex migrate:latest --knexfile backend/db/knexfile.js",
     "db:rollback": "knex migrate:rollback --knexfile backend/db/knexfile.js",
     "db:seed": "knex seed:run --knexfile backend/db/knexfile.js",

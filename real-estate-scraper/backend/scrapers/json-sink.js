@@ -44,6 +44,44 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+/**
+ * Inzeráty, kterým chybí údaje z detailu, od nejnověji viděných.
+ *
+ * Pořadí je záměrné: dohledávání je pomalé (jeden dotaz na inzerát), takže
+ * se stihne jen část. Čerstvé inzeráty jsou přitom to, co uživatel hledá
+ * nejdřív, a staré se doplní v dalších nocích.
+ *
+ * `enriched_at` drží datum posledního pokusu, ne úspěchu — jinak by se
+ * inzeráty, u kterých zdroj nic neuvádí, zkoušely donekonečna dokola.
+ */
+export function listingsNeedingDetail({ sources, limit = 500 } = {}) {
+  const store = load();
+
+  return store.listings
+    .filter((l) => !l.enriched_at)
+    .filter((l) => !sources || sources.includes(l.source))
+    .sort((a, b) => String(b.first_seen_at).localeCompare(String(a.first_seen_at)))
+    .slice(0, limit);
+}
+
+/** Zapíše do inzerátu, co se dohledalo na jeho detailu. */
+export function applyDetail(url, detail, now = new Date()) {
+  const store = load();
+  const listing = store.listings.find((l) => l.url === url);
+  if (!listing) return false;
+
+  // Prázdné hodnoty se nezapisují: zdroje se liší v tom, co uvádějí,
+  // a null z jednoho pokusu nemá přepsat údaj z výpisu.
+  for (const [key, value] of Object.entries(detail)) {
+    const empty = value === null || value === undefined
+      || (Array.isArray(value) && value.length === 0);
+    if (!empty) listing[key] = value;
+  }
+
+  listing.enriched_at = now.toISOString();
+  return true;
+}
+
 function load() {
   if (!cache) {
     const doc = readJson(listingsFile(), null);
@@ -194,35 +232,48 @@ export function writeJsonSnapshot(date = new Date()) {
 }
 
 /**
- * Zapíše dataset na disk. Inzeráty se řadí podle URL, aby byl denní
- * commit čitelný diff — bez toho by se pořadí míchalo podle toho,
- * v jakém pořadí zrovna zdroj odpověděl.
+ * Zapíše dataset na disk beze změny obsahu. Inzeráty se řadí podle URL,
+ * aby byl denní commit čitelný diff — bez toho by se pořadí míchalo podle
+ * toho, v jakém pořadí zrovna zdroj odpověděl.
+ *
+ * Používá to dohledávání detailů, které běží jako samostatný krok: nic
+ * nestahuje z výpisu, takže nesmí projít prořezáváním níž — to by mu
+ * přišlo, že celý dataset zmizel z nabídky.
+ */
+export function persistJsonSink(now = new Date()) {
+  const store = load();
+  const listings = [...store.listings].sort((a, b) => a.url.localeCompare(b.url));
+
+  writeJson(listingsFile(), {
+    updated_at: now.toISOString(),
+    count: listings.length,
+    listings
+  });
+
+  cache = { updated_at: now.toISOString(), count: listings.length, listings };
+  return listings.length;
+}
+
+/**
+ * Zapíše dataset po scrape běhu a vyřadí inzeráty, které z nabídky zmizely.
  */
 export function flushJsonSink(now = new Date()) {
   const store = load();
 
   const cutoff = new Date(now.getTime() - KEEP_DAYS * 86400000).toISOString();
   const before = store.listings.length;
-  const alive = store.listings.filter(
+  store.listings = store.listings.filter(
     (l) => seenThisRun.has(l.url) || !l.last_scraped || l.last_scraped >= cutoff
   );
-  const dropped = before - alive.length;
+  const dropped = before - store.listings.length;
 
-  alive.sort((a, b) => a.url.localeCompare(b.url));
-
-  writeJson(listingsFile(), {
-    updated_at: now.toISOString(),
-    count: alive.length,
-    listings: alive
-  });
-
-  cache = { updated_at: now.toISOString(), count: alive.length, listings: alive };
+  const count = persistJsonSink(now);
 
   console.log(
-    `✓ ${listingsFile()}: ${alive.length} inzerátů` +
+    `✓ ${listingsFile()}: ${count} inzerátů` +
       (dropped ? ` (${dropped} vypadlo, nevidět déle než ${KEEP_DAYS} dní)` : '')
   );
-  return alive.length;
+  return count;
 }
 
 /** Jen pro testy — vyčistí stav mezi případy. */

@@ -72,6 +72,17 @@ jobs:
           SCRAPER_CITIES: praha,brno
         run: npm run scrape
 
+      # Souřadnice a parametry ve výpisu nejsou, jsou až na detailu inzerátu.
+      # Dohledává se po dávkách — jeden dotaz na inzerát je pomalý, takže se
+      # za noc stihne jen část a zbytek se doplní další běh. Selhání tady
+      # nesmí shodit dávku dat, kterou scrape už přinesl.
+      - name: Dohledání detailů
+        id: enrich
+        continue-on-error: true
+        env:
+          SCRAPER_SINK: json
+        run: npm run enrich
+
       # Commitujeme i částečnou dávku — když jeden zdroj vypadne, data
       # z ostatních jsou pořád k něčemu. Prázdný diff se přeskočí.
       - name: Commit dat
@@ -99,9 +110,16 @@ jobs:
             echo
             echo "- ověření zdrojů: \`${{ steps.probe.outcome }}\`"
             echo "- stažení dat: \`${{ steps.scrape.outcome }}\`"
+            echo "- dohledání detailů: \`${{ steps.enrich.outcome }}\`"
             echo
             if [ -f data/listings.json ]; then
               echo "Inzerátů v datasetu: **$(node -p "require('./data/listings.json').count")**"
+              node -p "
+                const L = require('./data/listings.json').listings;
+                const pct = (n) => Math.round((100 * n) / L.length) + ' %';
+                'S GPS: **' + pct(L.filter((l) => l.latitude).length) + '**' +
+                ' · s vybaveností: **' + pct(L.filter((l) => (l.amenities || []).length).length) + '**'
+              "
             else
               echo "Dataset zatím neexistuje — žádný zdroj nic nevrátil."
             fi
