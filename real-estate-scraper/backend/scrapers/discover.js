@@ -374,8 +374,12 @@ async function outline(url) {
   }
 
   // Okolí souřadnic: bez něj je vidět jen že tam jsou, ne ke kterému
-  // inzerátu patří.
-  for (const snippet of contextAround(html, /"(?:lat|latitude)"\s*:\s*"?-?\d{1,3}\.\d{3,}/)) {
+  // inzerátu patří. Okno je široké schválně — hledá se identifikátor
+  // inzerátu, který v objektu bývá o kus dál než samotná poloha.
+  for (const snippet of contextAround(html, /"(?:lat|latitude)"\s*:\s*"?-?\d{1,3}\.\d{3,}/, {
+    chars: Number(process.env.DISCOVER_CONTEXT) || 600,
+    limit: 1
+  })) {
     console.log(`\n  ${C.b('okolí souřadnic')}:\n    …${snippet}…`);
   }
 

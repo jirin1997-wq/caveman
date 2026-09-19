@@ -14,6 +14,10 @@ on:
         description: 'Adresa k obhlídce (prázdné = projít zdroje inzerátů)'
         required: false
         default: ''
+      context:
+        description: 'Kolik znaků okolí vypsat u souřadnic'
+        required: false
+        default: '600'
 
 defaults:
   run:
@@ -40,4 +44,5 @@ jobs:
       - name: Průzkum
         env:
           TARGET_URL: ${{ inputs.url }}
+          DISCOVER_CONTEXT: ${{ inputs.context }}
         run: npm run discover -- "$TARGET_URL"
