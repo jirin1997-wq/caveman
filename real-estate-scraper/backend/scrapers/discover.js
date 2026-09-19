@@ -268,6 +268,27 @@ export function colonPairs($) {
   return [...pairs].slice(0, 40);
 }
 
+/**
+ * Okolí prvních výskytů vzoru ve zdroji stránky.
+ *
+ * Samotný nález („je tu latitude") nestačí, když se hodnota má spárovat
+ * s konkrétním inzerátem — na to je potřeba vidět objekt, ve kterém stojí,
+ * a čím je klíčovaný.
+ */
+export function contextAround(html, pattern, { chars = 600, limit = 2 } = {}) {
+  const text = String(html || '');
+  const re = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+  const found = [];
+
+  for (const match of text.matchAll(re)) {
+    if (found.length >= limit) break;
+    const from = Math.max(0, match.index - Math.floor(chars / 2));
+    found.push(text.slice(from, from + chars).replace(/\s+/g, ' '));
+  }
+
+  return found;
+}
+
 /** Souřadnice schované ve zdroji stránky — bez nich nejde vykreslit mapa. */
 export function geoHints(html) {
   const found = new Set();
@@ -350,6 +371,12 @@ async function outline(url) {
     if (!items.length) continue;
     console.log(`\n  ${C.b(label)}:`);
     for (const item of items) console.log(`    ${item}`);
+  }
+
+  // Okolí souřadnic: bez něj je vidět jen že tam jsou, ne ke kterému
+  // inzerátu patří.
+  for (const snippet of contextAround(html, /"(?:lat|latitude)"\s*:\s*"?-?\d{1,3}\.\d{3,}/)) {
+    console.log(`\n  ${C.b('okolí souřadnic')}:\n    …${snippet}…`);
   }
 
   const api = apiHints(html);

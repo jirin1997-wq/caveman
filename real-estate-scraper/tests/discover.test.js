@@ -9,7 +9,8 @@ import {
   paramPairs,
   geoHints,
   jsonLdBlocks,
-  colonPairs
+  colonPairs,
+  contextAround
 } from '../backend/scrapers/discover.js';
 
 const page = `<!doctype html><html><head><title>Výpis</title></head><body>
@@ -205,5 +206,33 @@ describe('colonPairs — náhradní čtení parametrů', () => {
       '<p>Poznámka: ' + 'velmi dlouhý popis nemovitosti '.repeat(5) + '</p>'
     );
     assert.deepEqual(colonPairs($), []);
+  });
+});
+
+describe('contextAround', () => {
+  const html = 'xxxx{"hash_id":123,"gps":{"lat":50.0632,"lng":14.31}}yyyy';
+
+  test('vrátí okolí nálezu, ne jen shodu', () => {
+    const [snippet] = contextAround(html, /"lat"/, { chars: 60 });
+    assert.match(snippet, /hash_id/);
+    assert.match(snippet, /50\.0632/);
+  });
+
+  test('víc mezer se smrskne na jednu — log má být čitelný', () => {
+    const [snippet] = contextAround('a\n\n   {"lat":1.5}', /"lat"/, { chars: 40 });
+    assert.ok(!/\s{2}/.test(snippet));
+  });
+
+  test('drží se zadaného počtu výskytů', () => {
+    const many = '{"lat":1.1}{"lat":2.2}{"lat":3.3}';
+    assert.equal(contextAround(many, /"lat"/, { limit: 2 }).length, 2);
+  });
+
+  test('bez nálezu vrátí prázdno', () => {
+    assert.deepEqual(contextAround('nic tu není', /"lat"/), []);
+  });
+
+  test('vzor bez příznaku g nespadne na nekonečné smyčce', () => {
+    assert.equal(contextAround('{"lat":1.1}{"lat":2.2}', /"lat"/i).length, 2);
   });
 });
