@@ -18,6 +18,8 @@
     "scrape:developers": "node backend/scrapers/developers.js praha",
     "snapshot": "node backend/jobs/snapshot.js",
     "enrich": "node backend/jobs/enrich.js",
+    "enrich:gps": "node backend/jobs/enrich-gps.js",
+    "enrich:parallel": "node backend/jobs/enrich-parallel.js",
     "db:migrate": "knex migrate:latest --knexfile backend/db/knexfile.js",
     "db:rollback": "knex migrate:rollback --knexfile backend/db/knexfile.js",
     "db:seed": "knex seed:run --knexfile backend/db/knexfile.js",
@@ -28,14 +30,15 @@
     "discover": "node backend/scrapers/discover.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "axios": "^1.6.5",
     "cheerio": "^1.0.0-rc.12",
-    "pg": "^8.11.3",
-    "knex": "^3.1.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "knex": "^3.1.0",
     "node-schedule": "^2.1.1",
-    "axios": "^1.6.5"
+    "p-queue": "^9.3.3",
+    "pg": "^8.11.3"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
