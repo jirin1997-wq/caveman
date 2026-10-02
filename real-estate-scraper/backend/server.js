@@ -1,11 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import db from './db/index.js';
 import { applyFilters, applySort, AMENITIES } from './lib/filters.js';
 import { enrichListing, MIN_COMPARABLE_SAMPLE } from './lib/pricing.js';
 
 dotenv.config();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -442,6 +446,21 @@ app.post('/api/calculator/affordability', (req, res) => {
       ? 'Splátka se vejde do běžného limitu bank (DSTI do 45 %).'
       : 'Splátka překračuje běžný limit bank (DSTI nad 45 %). Zvyš vlastní zdroje nebo hledej levnější nemovitost.'
   });
+});
+
+/* ------------------------------------------------------------------ */
+/* Static data endpoints */
+
+app.get('/data/listings.json', (req, res) => {
+  try {
+    const dataPath = path.join(__dirname, '..', 'data', 'listings.json');
+    const data = fs.readFileSync(dataPath, 'utf-8');
+    res.set('Content-Type', 'application/json');
+    res.send(data);
+  } catch (err) {
+    console.error('Chyba při čtení data/listings.json:', err);
+    res.status(500).json({ error: 'Nelze načíst data/listings.json' });
+  }
 });
 
 /* ------------------------------------------------------------------ */
