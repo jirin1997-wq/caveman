@@ -11,6 +11,8 @@ final class AppSettings: ObservableObject {
         var keepScreenAwake: Bool
         var learnAirfields: Bool?
         var groundReference: CombinedElevationProvider.GroundReference?
+        var tileSource: TileSource?
+        var downloadTilesWhileBrowsing: Bool?
     }
 
     private static let key = "flightlogger.settings.v1"
@@ -31,6 +33,15 @@ final class AppSettings: ObservableObject {
     /// elevation the app measured before departure.
     @Published var groundReference: CombinedElevationProvider.GroundReference? { didSet { persist() } }
 
+    /// Where map pictures come from. Nil means Apple's own map, which is fine
+    /// on the ground and blank in the air.
+    @Published var tileSource: TileSource? { didSet { persist() } }
+
+    /// Whether panning the map may fetch tiles it does not have. Off is the
+    /// setting for a flight: the map shows what was downloaded and spends no
+    /// data on the rest.
+    @Published var downloadTilesWhileBrowsing: Bool { didSet { persist() } }
+
     private var loaded = false
 
     init() {
@@ -48,6 +59,8 @@ final class AppSettings: ObservableObject {
         keepScreenAwake = stored?.keepScreenAwake ?? true
         learnAirfields = stored?.learnAirfields ?? true
         groundReference = stored?.groundReference
+        tileSource = stored?.tileSource
+        downloadTilesWhileBrowsing = stored?.downloadTilesWhileBrowsing ?? true
         loaded = true
     }
 
@@ -61,7 +74,9 @@ final class AppSettings: ObservableObject {
             useOnlineElevation: useOnlineElevation,
             keepScreenAwake: keepScreenAwake,
             learnAirfields: learnAirfields,
-            groundReference: groundReference
+            groundReference: groundReference,
+            tileSource: tileSource,
+            downloadTilesWhileBrowsing: downloadTilesWhileBrowsing
         )
         guard let data = try? encoder.encode(stored) else { return }
         UserDefaults.standard.set(data, forKey: Self.key)

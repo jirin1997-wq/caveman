@@ -97,6 +97,16 @@ enum Units {
         return String(format: "%d:%02d", total / 3600, (total % 3600) / 60)
     }
 
+    /// Storage, in the units a person reading a settings screen expects.
+    static func bytesLabel(_ bytes: Int64) -> String {
+        let kb = 1024.0, mb = kb * 1024, gb = mb * 1024
+        let value = Double(bytes)
+        if value >= gb { return String(format: "%.1f GB", value / gb) }
+        if value >= mb { return String(format: "%.0f MB", value / mb) }
+        if value >= kb { return String(format: "%.0f kB", value / kb) }
+        return "\(bytes) B"
+    }
+
     static func coordinateLabel(_ c: Coordinate) -> String {
         String(format: "%.4f, %.4f", c.latitude, c.longitude)
     }

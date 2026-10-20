@@ -31,6 +31,14 @@ enum AppPaths {
         return dir
     }
 
+    /// Map tiles, laid out as `tiles/z/x/y.png` — the same shape every XYZ
+    /// server uses, so what is on disk mirrors what was asked for.
+    static var tiles: URL {
+        let dir = root.appendingPathComponent("tiles", isDirectory: true)
+        ensure(dir)
+        return dir
+    }
+
     static var exports: URL {
         let dir = root.appendingPathComponent("exports", isDirectory: true)
         ensure(dir)

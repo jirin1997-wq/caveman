@@ -23,6 +23,7 @@ odlet. Musí platit obojí najednou.
 | **Voda** | Vodní plochy, hydroplány — reference se sbírá i za pojíždění po hladině |
 | **Deník** | Doba letu, odlet/přílet, max. výška, uletěná vzdálenost, nalétané hodiny |
 | **Živá mapa** | Trasa se kreslí **při letu**, ne až potom. Na celou obrazovku i jako karta |
+| **Offline mapa** | Stažené dlaždice v telefonu — mapa funguje i tam, kde není signál |
 | **Graf průběhu** | Rychlost, stoupání/klesání a výška nad zemí na společné časové ose |
 | **Graf ↔ mapa** | Potáhnutím po grafu se na mapě ukáže, kde letadlo v tu chvíli bylo |
 | **Poznámka k letu** | Registrace a volný text, co aplikace sama vědět nemůže |
@@ -144,6 +145,47 @@ zapíše plochu hned, i s naměřenou výškou, pokud už nějakou má.
 Vlastní plochy mají přednost před datasetem, když jsou blíž. Naměřená výška
 naopak **nikdy nepřepíše** publikovanou elevaci z datasetu — ruční GPS na to
 není.
+
+---
+
+## Offline mapa
+
+Apple Maps vypadá nejlíp a ve vzduchu nefunguje — jejich dlaždice se uložit
+nedají a nad tisíc stop není signál, kterým by se donačetly. Aplikace proto umí
+vlastní zdroj dlaždic a **stáhne si kus mapy dopředu**.
+
+**Co se stahuje.** V *Nastavení → Offline mapa* vybereš střed (aktuální poloha
+nebo kterákoli tvoje plocha), okruh a rozsah zoomu. Než cokoli začne, ukáže se
+počet dlaždic a odhad velikosti — každý další zoom stojí zhruba **čtyřnásobek**,
+takže je to číslo, které rozhoduje mezi 10 MB a 400 MB.
+
+| Okruh | Zoom 10–13 | Velikost |
+|---|---|---|
+| 10 km | 73 dlaždic | ~1,3 MB |
+| 30 km | 589 dlaždic | ~10 MB |
+| 50 km | 1 484 dlaždic | ~26 MB |
+
+Zoom 13 vychází na našich zeměpisných šířkách zhruba na **12 m na pixel**, což
+rozliší dráhu; zoom 10 je 98 m, což rozliší město.
+
+**Odkud se stahuje — a tady je jediné skutečné omezení.** Veřejné dlaždicové
+servery OpenStreetMap jsou dar, ne služba, a jejich podmínky stahování po
+oblastech **nedovolují**. Aplikace to hlídá sama a stažení z nich odmítne;
+prohlížet se z nich smí. Na offline mapu si nastav zdroj, který to v podmínkách
+má — MapTiler, Thunderforest, Stadia a podobné mají free tarif, který offline
+cache povoluje, a kdo si pustí vlastní server, může samozřejmě taky. Aplikace
+se dodává **bez klíče a bez výchozího zdroje**: vložíš adresu ve tvaru
+`https://…/{z}/{x}/{y}.png`, případně s `{key}`, a aplikace dodrží rychlost
+dotazů, kterou si poskytovatel řekne.
+
+**Co z toho plyne za letu.** Když je oblast stažená, mapa je plnohodnotná i bez
+signálu — vlastní dlaždice úplně nahradí Apple podklad. Když stažená není,
+zůstane prázdná mřížka. Trasa se kreslí v obou případech, protože jde ze
+zapisovače, ne z mapy.
+
+Dlaždice leží v `tiles/z/x/y.png` — ve stejném tvaru, jaký má každý XYZ server,
+takže se dají i nasypat zvenčí. Mazání oblasti ponechá dlaždice, které si drží
+jiná oblast, takže dvě sousední plochy si navzájem neudělají v mapě díru.
 
 ---
 
@@ -374,6 +416,13 @@ Poctivě, protože to není jedno:
 
 **Ověřené:**
 
+- Dlaždicová matematika proti nezávislé transkripci v `tools/tile-reference.py`:
+  adresy známých míst, chování na pólech i za 180. poledníkem, rozlišení, počty
+  dlaždic a to, že se rohy dlaždic vracejí samy na sebe.
+- Úložiště dlaždic: cesta odpovídá XYZ konvenci, zápis a čtení přežijí restart,
+  a smazání oblasti nesmí vzít dlaždice, které si drží jiná.
+- Stahovač odmítne nepoužitelný zdroj, hromadné stahování z OSM i nesmyslně
+  velkou oblast — a odmítne to **dřív**, než něco stáhne.
 - Umělé trasy se vracejí na výchozí plochu (dřív odlétaly 20 km na východ a
   deník přitom tvrdil návrat na stejné letiště) a přitom se opravdu někam
   dostanou.

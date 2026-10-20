@@ -105,7 +105,9 @@ Co je pokryté, je vypsané v README v sekci „Co je ověřené“. Nejdůleži
 11 scénářů a je jediná věc, která se v tomhle prostředí dala doopravdy spustit.
 
 ```bash
-python3 tools/detector-reference.py
+python3 tools/detector-reference.py     # 11 scénářů detekce
+python3 tools/tile-reference.py         # kontrolní hodnoty pro dlaždice
+python3 tools/check-swift-calls.py      # náhrada za překladač, viz níž
 ```
 
 ---
@@ -157,6 +159,11 @@ Tady buď upřímný sám k sobě: **tenhle kód se nikdy nepřekládal.** Náhr
 
 Co nepokryly: **typovou kontrolu a dostupnost API.** To umí jenom překladač.
 
+Ta statická kontrola je v repu jako `tools/check-swift-calls.py` a dá se pustit
+kdykoli. Projde každé volání proti deklaraci (včetně trailing closure a
+odvozených memberwise inicializátorů), každý použitý typ proti deklarovaným a
+párování závorek. Nemá seznam výjimek — co nahlásí, stojí za to si přečíst.
+
 Co se tedy může objevit:
 
 - **Nesedící typ v SwiftUI view** — nejpravděpodobnější. SwiftUI hlásí typové
@@ -204,6 +211,10 @@ Odinstalace aplikace smaže všechno — deník si předtím vyexportuj.
    záznamem), přepne se karta na „Výška nad zemí měřená barometrem“.
 3. **Čas vzletu v kartě události.** Má být o pár sekund dřív než okamžik, kdy
    se stav přepnul — to je zpětné razítkování na skutečné odlepení kol.
-4. **Prahy.** Jsou nastavené z rozumných hodnot, ne z naměřených dat. Po prvním
+4. **Offline mapa.** Než poletíš, stáhni si v *Nastavení → Offline mapa* okolí
+   svého letiště. Potřebuješ k tomu vlastní zdroj dlaždic — proč, je v README
+   v sekci Offline mapa. Bez stažené oblasti zůstane mapa ve vzduchu prázdná;
+   trasa se na ni kreslí dál.
+5. **Prahy.** Jsou nastavené z rozumných hodnot, ne z naměřených dat. Po prvním
    letu se podívej do grafu, jakou rychlost a výšku tvůj stroj reálně drží, a
    v *Nastavení → Profil detekce* to doťukej.

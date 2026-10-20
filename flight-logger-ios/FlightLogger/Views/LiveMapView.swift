@@ -15,49 +15,37 @@ extension TrackPoint {
 
 /// The track being drawn as it is recorded.
 ///
-/// One thing to be clear about: Apple's map tiles need a network. In the air
-/// there usually isn't one, so expect a blank grid — but the track still draws
-/// on it, because the line comes from the recorder, not from the map. Anything
-/// the phone cached on the ground stays available.
+/// What is underneath depends on what the pilot set up. With a tile source and
+/// a downloaded region it is a real map that works with no signal; with Apple
+/// Maps it is a real map on the ground and a blank grid in the air. Either
+/// way the orange line is drawn from the recorder, not from the map, so it
+/// appears regardless.
 struct LiveTrackMap: View {
 
     var track: [TrackPoint]
     var follow: Bool
     /// Marks where the flight started, once there is a flight.
     var departure: Coordinate?
+    var marked: Coordinate?
 
-    @State private var camera: MapCameraPosition = .automatic
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var tiles: TileStore
 
     var body: some View {
-        Map(position: $camera) {
-            if track.count > 1 {
-                MapPolyline(coordinates: track.map(\.clCoordinate))
-                    .stroke(.orange, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-            }
-            if let departure {
-                Marker("Vzlet", systemImage: "airplane.departure", coordinate: departure.clCoordinate)
-                    .tint(.green)
-            }
-            if let last = track.last {
-                Annotation("", coordinate: last.clCoordinate) {
-                    ZStack {
-                        Circle().fill(.orange.opacity(0.25)).frame(width: 26, height: 26)
-                        Circle().fill(.orange).frame(width: 11, height: 11)
-                        Circle().strokeBorder(.white, lineWidth: 2).frame(width: 11, height: 11)
-                    }
-                    .accessibilityLabel("Aktuální poloha")
-                }
-            }
-        }
-        .mapStyle(.standard(elevation: .flat))
-        .onChange(of: track.last?.t) {
-            guard follow, let last = track.last else { return }
-            camera = .region(
-                MKCoordinateRegion(
-                    center: last.clCoordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
-                )
-            )
+        TileMapView(
+            track: track,
+            source: settings.tileSource,
+            files: tiles.files,
+            allowsNetwork: settings.downloadTilesWhileBrowsing,
+            follow: follow,
+            departure: departure,
+            arrival: nil,
+            marked: marked,
+            staticRegion: nil
+        )
+        .overlay(alignment: .bottomTrailing) {
+            MapAttribution(source: settings.tileSource)
+                .padding(4)
         }
     }
 }

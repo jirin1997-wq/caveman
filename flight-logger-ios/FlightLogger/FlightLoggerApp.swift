@@ -8,6 +8,8 @@ struct FlightLoggerApp: App {
     @StateObject private var store: FlightStore
     @StateObject private var location: LocationService
     @StateObject private var recorder: FlightRecorder
+    @StateObject private var tiles = TileStore()
+    @StateObject private var downloader = TileDownloader()
 
     init() {
         let settings = AppSettings()
@@ -28,6 +30,8 @@ struct FlightLoggerApp: App {
                 .environmentObject(store)
                 .environmentObject(location)
                 .environmentObject(recorder)
+                .environmentObject(tiles)
+                .environmentObject(downloader)
         }
     }
 }

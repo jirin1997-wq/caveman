@@ -176,6 +176,10 @@ struct FlightDetailView: View {
 
 /// The recorded track, drawn over the map. Takeoff and landing get their own
 /// markers so a glance answers "where did this actually happen".
+///
+/// Same renderer as the live map, so a flight looks the same whether it is
+/// happening now or was flown last week — and so a downloaded region serves
+/// both.
 private struct TrackMap: View {
 
     var track: [TrackPoint]
@@ -183,35 +187,25 @@ private struct TrackMap: View {
     /// Where the pilot is pointing in the graph, if anywhere.
     var marked: TrackPoint?
 
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var tiles: TileStore
+
     var body: some View {
-        Map(initialPosition: .region(region)) {
-            MapPolyline(coordinates: coordinates)
-                .stroke(.orange, lineWidth: 3)
-            if let marked {
-                Annotation("", coordinate: CLLocationCoordinate2D(latitude: marked.lat, longitude: marked.lon)) {
-                    ZStack {
-                        Circle().fill(.white).frame(width: 15, height: 15)
-                        Circle().fill(.orange).frame(width: 9, height: 9)
-                    }
-                    .shadow(radius: 2)
-                    .accessibilityLabel("Vybraný okamžik letu")
-                }
-            }
-            Marker("Vzlet", systemImage: "airplane.departure", coordinate: coordinate(flight.takeoff))
-                .tint(.green)
-            if let landing = current.landing {
-                Marker("Přistání", systemImage: "airplane.arrival", coordinate: coordinate(landing))
-                    .tint(.blue)
-            }
+        TileMapView(
+            track: track,
+            source: settings.tileSource,
+            files: tiles.files,
+            allowsNetwork: settings.downloadTilesWhileBrowsing,
+            follow: false,
+            departure: flight.takeoff.coordinate,
+            arrival: flight.landing?.coordinate,
+            marked: marked.map { Coordinate(latitude: $0.lat, longitude: $0.lon) },
+            staticRegion: region
+        )
+        .overlay(alignment: .bottomTrailing) {
+            MapAttribution(source: settings.tileSource)
+                .padding(4)
         }
-    }
-
-    private var coordinates: [CLLocationCoordinate2D] {
-        track.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
-    }
-
-    private func coordinate(_ event: FlightEvent) -> CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: event.latitude, longitude: event.longitude)
     }
 
     private var region: MKCoordinateRegion {
@@ -220,12 +214,18 @@ private struct TrackMap: View {
         guard let minLat = lats.min(), let maxLat = lats.max(),
               let minLon = lons.min(), let maxLon = lons.max() else {
             return MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: flight.takeoff.latitude, longitude: flight.takeoff.longitude),
+                center: CLLocationCoordinate2D(
+                    latitude: flight.takeoff.latitude,
+                    longitude: flight.takeoff.longitude
+                ),
                 span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
             )
         }
         return MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2),
+            center: CLLocationCoordinate2D(
+                latitude: (minLat + maxLat) / 2,
+                longitude: (minLon + maxLon) / 2
+            ),
             span: MKCoordinateSpan(
                 latitudeDelta: max(0.01, (maxLat - minLat) * 1.3),
                 longitudeDelta: max(0.01, (maxLon - minLon) * 1.3)

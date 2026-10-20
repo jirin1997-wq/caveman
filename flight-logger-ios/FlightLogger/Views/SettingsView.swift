@@ -6,6 +6,8 @@ struct SettingsView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var recorder: FlightRecorder
     @EnvironmentObject private var store: FlightStore
+    @EnvironmentObject private var tiles: TileStore
+    @EnvironmentObject private var downloader: TileDownloader
 
     @State private var showingAirportImporter = false
     @State private var importMessage: String?
@@ -151,6 +153,18 @@ struct SettingsView: View {
                 Text("Uložených dlaždic terénu")
                 Spacer()
                 Text("\(recorder.cachedTiles)").foregroundStyle(.secondary)
+            }
+            NavigationLink {
+                OfflineMapsView(store: tiles, downloader: downloader)
+            } label: {
+                HStack {
+                    Text("Offline mapa")
+                    Spacer()
+                    Text(tiles.bytesOnDisk > 0
+                         ? Units.bytesLabel(tiles.bytesOnDisk)
+                         : "nestažená")
+                        .foregroundStyle(.secondary)
+                }
             }
             NavigationLink {
                 AirfieldsView(database: recorder.airports)
