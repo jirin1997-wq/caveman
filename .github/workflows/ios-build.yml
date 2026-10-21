@@ -1,0 +1,47 @@
+name: iOS build and test
+
+on:
+  push:
+    branches: [claude/flight-tracking-app-uci2n0]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: flight-logger-ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: |
+          ls /Applications | grep Xcode
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: Run the static checks
+        run: |
+          python3 tools/check-swift-calls.py
+          python3 tools/check-translations.py
+          python3 tools/detector-reference.py > /dev/null
+          python3 tools/tile-reference.py > /dev/null
+
+      - name: Build for the simulator
+        run: |
+          xcodebuild build \
+            -project FlightLogger.xcodeproj \
+            -scheme FlightLogger \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -200
+
+      - name: Run the unit tests
+        run: |
+          xcodebuild test \
+            -project FlightLogger.xcodeproj \
+            -scheme FlightLogger \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -300
