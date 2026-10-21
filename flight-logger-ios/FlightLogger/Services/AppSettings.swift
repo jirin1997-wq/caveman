@@ -13,6 +13,7 @@ final class AppSettings: ObservableObject {
         var groundReference: CombinedElevationProvider.GroundReference?
         var tileSource: TileSource?
         var downloadTilesWhileBrowsing: Bool?
+        var language: AppLanguage?
     }
 
     private static let key = "flightlogger.settings.v1"
@@ -42,6 +43,15 @@ final class AppSettings: ObservableObject {
     /// data on the rest.
     @Published var downloadTilesWhileBrowsing: Bool { didSet { persist() } }
 
+    /// The interface language. Applies to every screen that has been moved onto
+    /// `L10n`; the rest of the app stays Czech until it is.
+    @Published var language: AppLanguage {
+        didSet {
+            L10n.active = L10n.resolve(language)
+            persist()
+        }
+    }
+
     private var loaded = false
 
     init() {
@@ -61,6 +71,8 @@ final class AppSettings: ObservableObject {
         groundReference = stored?.groundReference
         tileSource = stored?.tileSource
         downloadTilesWhileBrowsing = stored?.downloadTilesWhileBrowsing ?? true
+        language = stored?.language ?? .system
+        L10n.active = L10n.resolve(language)
         loaded = true
     }
 
@@ -76,7 +88,8 @@ final class AppSettings: ObservableObject {
             learnAirfields: learnAirfields,
             groundReference: groundReference,
             tileSource: tileSource,
-            downloadTilesWhileBrowsing: downloadTilesWhileBrowsing
+            downloadTilesWhileBrowsing: downloadTilesWhileBrowsing,
+            language: language
         )
         guard let data = try? encoder.encode(stored) else { return }
         UserDefaults.standard.set(data, forKey: Self.key)

@@ -50,6 +50,8 @@ MKTileOverlayPath MKTileOverlayRenderer MKOverlay MKOverlayRenderer MKPolyline
 MKPolylineRenderer MKPointAnnotation MKAnnotation MKAnnotationView
 MKMarkerAnnotationView MKUserLocation MKCoordinateRegion MKCoordinateSpan
 XCTestCase XCTest Self Type NSTemporaryDirectory UInt64 Int64
+SceneKit SCNView SCNScene SCNNode SCNVector3 SCNBox SCNCapsule SCNCylinder
+SCNCamera SCNLookAtConstraint SCNMaterial SCNTransaction SCNAction
 '''.split())
 
 SKIP_WORDS = {'if', 'for', 'while', 'switch', 'guard', 'return', 'catch', 'func', 'init'}
@@ -71,6 +73,22 @@ def strip_noise(src):
         if src[i] == '"':
             j = i + 1
             while j < n and src[j] != '"':
+                if src[j] == '\\' and j + 1 < n and src[j + 1] == '(':
+                    # \( ... ) interpolation: it may hold a string of its own
+                    depth, j = 1, j + 2
+                    while j < n and depth > 0:
+                        if src[j] == '(':
+                            depth += 1
+                        elif src[j] == ')':
+                            depth -= 1
+                        elif src[j] == '"':
+                            j += 1
+                            while j < n and src[j] != '"':
+                                if src[j] == '\\':
+                                    j += 1
+                                j += 1
+                        j += 1
+                    continue
                 if src[j] == '\\':
                     j += 1
                 j += 1

@@ -169,6 +169,27 @@ final class AirportDatabase: ObservableObject {
         return best
     }
 
+    /// Every known airfield within `radius`, nearest first, learned ones included.
+    ///
+    /// The bucket index covers at least a degree in each direction around any
+    /// point, about 70 km east-west at this latitude. A radius up to 60 km is
+    /// therefore answered completely; a larger one would silently miss fields,
+    /// so the radius is capped there.
+    func nearbyList(
+        to coordinate: Coordinate,
+        limit: Int,
+        within radius: Double = 60_000
+    ) -> [(airport: Airport, distance: Double)] {
+        let cap = min(radius, 60_000)
+        var found: [(airport: Airport, distance: Double)] = []
+        for candidate in learned + candidates(around: coordinate) {
+            let d = GeoMath.distance(coordinate, candidate.coordinate)
+            if d <= cap { found.append((candidate, d)) }
+        }
+        found.sort { $0.distance < $1.distance }
+        return Array(found.prefix(limit))
+    }
+
     /// Field elevation of the nearest airfield that actually has one.
     ///
     /// The radius is deliberately tighter than `nearest(to:)`: a runway

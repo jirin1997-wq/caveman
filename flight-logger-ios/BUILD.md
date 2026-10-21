@@ -108,6 +108,7 @@ Co je pokryté, je vypsané v README v sekci „Co je ověřené“. Nejdůleži
 python3 tools/detector-reference.py     # 11 scénářů detekce
 python3 tools/tile-reference.py         # kontrolní hodnoty pro dlaždice
 python3 tools/check-swift-calls.py      # náhrada za překladač, viz níž
+python3 tools/check-translations.py    # chybějící anglické překlady
 ```
 
 ---

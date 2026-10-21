@@ -37,14 +37,16 @@ struct FlightLoggerApp: App {
 }
 
 struct RootView: View {
+    @EnvironmentObject private var settings: AppSettings
+
     var body: some View {
         TabView {
             LiveView()
-                .tabItem { Label("Let", systemImage: "airplane") }
+                .tabItem { Label(L10n.t("Let"), systemImage: "airplane") }
             LogbookView()
-                .tabItem { Label("Deník", systemImage: "book.closed") }
+                .tabItem { Label(L10n.t("Deník"), systemImage: "book.closed") }
             SettingsView()
-                .tabItem { Label("Nastavení", systemImage: "gearshape") }
+                .tabItem { Label(L10n.t("Nastavení"), systemImage: "gearshape") }
         }
         .tint(.orange)
     }

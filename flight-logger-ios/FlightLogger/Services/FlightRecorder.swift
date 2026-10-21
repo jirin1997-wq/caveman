@@ -432,6 +432,36 @@ final class FlightRecorder: ObservableObject {
     var cachedTiles: Int { elevationProvider.cachedTileCount }
     var groundReference: CombinedElevationProvider.GroundReference? { elevationProvider.groundReference }
     var airportCount: Int { airports.airports.count + airports.learned.count }
+    /// The field the pilot is flying to (Direct-to). Not persisted: a new
+    /// flight starts with no target, as it should.
+    @Published private(set) var directTarget: Airport?
+
+    func setDirectTarget(_ airport: Airport?) {
+        directTarget = airport
+    }
+
+    /// Where the aircraft is, as the navigation screens see it.
+    var position: Coordinate? { location.lastFix?.coordinate }
+
+    /// Bearing and distance from here to the Direct-to target, when both are known.
+    var directNavigation: (bearing: Double, distance: Double)? {
+        guard let here = position, let target = directTarget else { return nil }
+        return (GeoMath.bearing(from: here, to: target.coordinate),
+                GeoMath.distance(here, target.coordinate))
+    }
+
+    /// The fields nearest the aircraft, for the EMER key.
+    func nearbyAirfields(limit: Int = 8) -> [AirfieldBearing] {
+        guard let here = position else { return [] }
+        return airports.nearbyList(to: here, limit: limit).map { item in
+            AirfieldBearing(
+                airport: item.airport,
+                distance: item.distance,
+                bearing: GeoMath.bearing(from: here, to: item.airport.coordinate)
+            )
+        }
+    }
+
     var nearestAirport: Airport? {
         guard let fix = location.lastFix else { return nil }
         return airports.nearest(to: fix.coordinate)?.airport

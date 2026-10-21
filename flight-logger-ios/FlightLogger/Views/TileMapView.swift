@@ -1,3 +1,4 @@
+import CoreLocation
 import MapKit
 import SwiftUI
 
@@ -84,6 +85,8 @@ struct TileMapView: UIViewRepresentable {
     var marked: Coordinate?
     /// Set once for a finished flight; nil while recording.
     var staticRegion: MKCoordinateRegion?
+    /// The Direct-to field. Drawn dashed from the last track point.
+    var target: Coordinate? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -102,6 +105,7 @@ struct TileMapView: UIViewRepresentable {
         context.coordinator.apply(source: source, files: files, allowsNetwork: allowsNetwork, to: map)
         context.coordinator.apply(track: track, to: map)
         context.coordinator.apply(departure: departure, arrival: arrival, marked: marked, to: map)
+        context.coordinator.apply(target: target, from: track.last, to: map)
 
         if follow, let last = track.last {
             let centre = CLLocationCoordinate2D(latitude: last.lat, longitude: last.lon)
@@ -160,6 +164,26 @@ struct TileMapView: UIViewRepresentable {
             polyline = line
         }
 
+        private var directLine: MKPolyline?
+
+        /// A dashed line from the aircraft to the Direct-to field, replaced
+        /// whenever either end moves.
+        func apply(target: Coordinate?, from here: TrackPoint?, to map: MKMapView) {
+            if let directLine {
+                map.removeOverlay(directLine)
+                self.directLine = nil
+            }
+            guard let target, let here else { return }
+            var coords = [
+                CLLocationCoordinate2D(latitude: here.lat, longitude: here.lon),
+                CLLocationCoordinate2D(latitude: target.latitude, longitude: target.longitude),
+            ]
+            let line = MKPolyline(coordinates: &coords, count: coords.count)
+            line.title = "direct"
+            map.addOverlay(line, level: .aboveLabels)
+            directLine = line
+        }
+
         func apply(
             departure: Coordinate?,
             arrival: Coordinate?,
@@ -197,10 +221,16 @@ struct TileMapView: UIViewRepresentable {
             }
             if let line = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: line)
-                renderer.strokeColor = UIColor.systemOrange
-                renderer.lineWidth = 3
-                renderer.lineJoin = .round
-                renderer.lineCap = .round
+                if line.title == "direct" {
+                    renderer.strokeColor = UIColor.systemBlue
+                    renderer.lineWidth = 2
+                    renderer.lineDashPattern = [8, 6]
+                } else {
+                    renderer.strokeColor = UIColor.systemOrange
+                    renderer.lineWidth = 3
+                    renderer.lineJoin = .round
+                    renderer.lineCap = .round
+                }
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)

@@ -16,6 +16,17 @@ enum GeoMath {
 
     /// Offsets a coordinate by a north/east distance in meters. Used by the
     /// synthetic track generator and by the tests.
+    /// Initial great-circle bearing from `a` to `b`, degrees clockwise from true
+    /// north, in [0, 360).
+    static func bearing(from a: Coordinate, to b: Coordinate) -> Double {
+        let p1 = a.latitude * .pi / 180, p2 = b.latitude * .pi / 180
+        let dl = (b.longitude - a.longitude) * .pi / 180
+        let y = sin(dl) * cos(p2)
+        let x = cos(p1) * sin(p2) - sin(p1) * cos(p2) * cos(dl)
+        let degrees = atan2(y, x) * 180 / .pi
+        return (degrees + 360).truncatingRemainder(dividingBy: 360)
+    }
+
     static func offset(_ c: Coordinate, north: Double, east: Double) -> Coordinate {
         let dLat = north / earthRadius * 180 / .pi
         let dLon = east / (earthRadius * cos(c.latitude * .pi / 180)) * 180 / .pi

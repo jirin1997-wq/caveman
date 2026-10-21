@@ -16,6 +16,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                languageSection
                 aircraftSection
                 profileSection
                 thresholdSection
@@ -47,6 +48,20 @@ struct SettingsView: View {
     }
 
     // MARK: - Sections
+
+    private var languageSection: some View {
+        Section {
+            Picker(L10n.t("Jazyk aplikace"), selection: $settings.language) {
+                ForEach(AppLanguage.allCases, id: \.self) { language in
+                    Text(language.name).tag(language)
+                }
+            }
+        } header: {
+            Text(L10n.t("Jazyk"))
+        } footer: {
+            Text("Čeština, nebo English. Zatím přeložené jsou hlavní obrazovka, záložky a nouzové nabídky; zbytek nastavení zůstává česky.")
+        }
+    }
 
     private var aircraftSection: some View {
         Section("Letadlo") {

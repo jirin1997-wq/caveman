@@ -1,59 +1,163 @@
 import CoreLocation
 import SwiftUI
 
-/// The in-flight screen: what the detector sees, right now.
+/// The in-flight screen, laid out after a primary flight display and a
+/// multifunction display: the aircraft's numbers on tapes at the edges, the map
+/// in the middle, and a fixed row of operator keys along the foot.
 ///
-/// Laid out for a kneeboard — big numbers, no scrolling needed for the ones
-/// that matter, and the terrain source always visible so the pilot knows how
-/// much to trust the AGL reading.
+/// On an iPhone the parts stack; on an iPad they sit in three columns. The keys
+/// stay in the same place in both, as they do on the Garmin AXIS panels.
 struct LiveView: View {
 
     @EnvironmentObject private var recorder: FlightRecorder
     @EnvironmentObject private var location: LocationService
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    @State private var presented: Sheet?
+
+    enum Sheet: String, Identifiable {
+        case emergency, direct, menu
+        var id: String { rawValue }
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    phaseBanner
-                    readouts
-                    mapCard
-                    graphCard
-                    terrainCard
-                    sensorCard
-                    if let flight = recorder.currentFlight {
-                        currentFlightCard(flight)
-                    }
-                    if let event = recorder.lastEvent {
-                        lastEventCard(event)
-                    }
-                    controls
+            Group {
+                if sizeClass == .regular {
+                    wideLayout
+                } else {
+                    narrowLayout
                 }
-                .padding()
             }
-            .navigationTitle("Letový zapisovač")
+            .safeAreaInset(edge: .bottom) { keyBar }
+            .navigationTitle(L10n.t("Letový zapisovač"))
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $presented) { item in
+                switch item {
+                case .emergency: EmergencySheet()
+                case .direct: DirectSheet()
+                case .menu: MenuSheet()
+                }
+            }
         }
     }
 
-    // MARK: - Phase
+    // MARK: - Layouts
 
-    private var phaseBanner: some View {
-        VStack(spacing: 8) {
-            Text(recorder.snapshot.phase.label)
-                .font(.system(size: 30, weight: .heavy, design: .rounded))
+    private var narrowLayout: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                permissionNotice
+                phaseHeader
+                HStack(alignment: .top, spacing: 8) {
+                    speedTape.frame(width: 70)
+                    verticalSpeed.frame(width: 26)
+                    altitudeTape.frame(width: 92)
+                }
+                .frame(height: 240)
+                directBar
+                mapCard(fill: false)
+                if showsApron { apronCard }
+                graphCard
+                terrainCard
+                sensorCard
+                if let flight = recorder.currentFlight { flightCard(flight) }
+                if let event = recorder.lastEvent { eventCard(event) }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private var wideLayout: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(spacing: 10) {
+                phaseHeader
+                HStack(alignment: .top, spacing: 8) {
+                    speedTape.frame(width: 84)
+                    verticalSpeed.frame(width: 30)
+                    altitudeTape.frame(width: 100)
+                }
+                .frame(height: 380)
+                if showsApron { apronCard }
+                Spacer(minLength: 0)
+            }
+            .frame(width: 330)
+
+            VStack(spacing: 12) {
+                directBar
+                mapCard(fill: true)
+                graphCard
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            ScrollView {
+                VStack(spacing: 12) {
+                    permissionNotice
+                    terrainCard
+                    sensorCard
+                    if let flight = recorder.currentFlight { flightCard(flight) }
+                    if let event = recorder.lastEvent { eventCard(event) }
+                }
+            }
+            .frame(width: 320)
+        }
+        .padding()
+    }
+
+    // MARK: - Tapes
+
+    private var speedKt: Double? {
+        recorder.snapshot.speed >= 0 ? Units.mpsToKnots(recorder.snapshot.speed) : nil
+    }
+
+    private var altitudeFt: Double? {
+        recorder.snapshot.altitude.map(Units.metersToFeet)
+    }
+
+    private var climbFpm: Double? {
+        recorder.snapshot.climbRate.map(Units.mpsToFpm)
+    }
+
+    private var speedTape: some View {
+        Tape(value: speedKt, step: 10, accent: .blue) { "\(Int($0.rounded()))" }
+            .overlay(alignment: .topLeading) { tapeName("SPEED") }
+    }
+
+    private var altitudeTape: some View {
+        Tape(value: altitudeFt, step: 100, accent: .green) { "\(Int($0.rounded()))" }
+            .overlay(alignment: .topLeading) { tapeName("ALT MSL") }
+    }
+
+    private var verticalSpeed: some View {
+        VerticalSpeedIndicator(fpm: climbFpm)
+    }
+
+    private func tapeName(_ title: String) -> some View {
+        Text(L10n.t(title))
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.secondary)
+            .padding(4)
+    }
+
+    // MARK: - Header and direct-to
+
+    private var phaseHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.t(recorder.snapshot.phase.label))
+                .font(.system(size: 26, weight: .heavy, design: .rounded))
                 .foregroundStyle(phaseColor)
             if recorder.snapshot.candidateProgress > 0 && recorder.snapshot.candidateProgress < 1 {
                 ProgressView(value: recorder.snapshot.candidateProgress)
                     .tint(phaseColor)
-                Text("ověřuji změnu stavu…")
+                Text(L10n.t("ověřuji změnu stavu…"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
-        .background(phaseColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(phaseColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var phaseColor: Color {
@@ -67,47 +171,46 @@ struct LiveView: View {
         }
     }
 
-    // MARK: - Readouts
-
-    private var readouts: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            Readout(title: "RYCHLOST", value: Units.knotsLabel(recorder.snapshot.speed >= 0 ? recorder.snapshot.speed : nil))
-            Readout(title: "VÝŠKA MSL", value: Units.feetLabel(recorder.snapshot.altitude))
-            Readout(
-                title: "NAD ZEMÍ (AGL)",
-                value: Units.feetLabel(recorder.snapshot.agl),
-                emphasis: recorder.snapshot.agl != nil
-            )
-            Readout(title: "STOUPÁNÍ", value: Units.fpmLabel(recorder.snapshot.climbRate))
-        }
-    }
-
-    private struct Readout: View {
-        var title: String
-        var value: String
-        var emphasis: Bool = false
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.caption2.weight(.semibold))
+    /// The Direct-to line: target, bearing, distance and, when moving, the time
+    /// to it at the current ground speed. Tapping it opens DIRECT.
+    private var directBar: some View {
+        Button {
+            presented = .direct
+        } label: {
+            HStack(spacing: 10) {
+                if let target = recorder.directTarget, let nav = recorder.directNavigation {
+                    Text(target.code)
+                        .font(.headline)
+                    Text("\(L10n.t("Kurz")) \(String(format: "%03.0f°", nav.bearing))")
+                        .font(.subheadline.monospacedDigit())
+                    Text(String(format: "%.1f NM", nav.distance / 1852))
+                        .font(.subheadline.monospacedDigit())
+                    if let kt = speedKt, kt > 3 {
+                        Text("\(L10n.t("Odhad")) \(Units.durationLabel(nav.distance / Units.knotsToMps(kt)))")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                } else {
+                    Text(L10n.t("Direct-to: bez cíle — klepni pro výběr letiště"))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundStyle(emphasis ? Color.orange : Color.primary)
-                    .minimumScaleFactor(0.6)
-                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
         }
+        .buttonStyle(.plain)
     }
 
-    // MARK: - Map and graph
+    // MARK: - Map, graph and the aircraft on the apron
 
-    /// The track being drawn while it is recorded. Tapping opens it full size.
-    private var mapCard: some View {
+    private func mapCard(fill: Bool) -> some View {
         NavigationLink {
             LiveMapView()
         } label: {
@@ -115,13 +218,15 @@ struct LiveView: View {
                 LiveTrackMap(
                     track: recorder.liveTrack.points,
                     follow: true,
-                    departure: recorder.currentFlight?.takeoff.coordinate
+                    departure: recorder.currentFlight?.takeoff.coordinate,
+                    target: recorder.directTarget?.coordinate
                 )
-                .frame(height: 170)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 230, maxHeight: fill ? .infinity : 230)
                 .allowsHitTesting(false)
 
                 HStack {
-                    Label("Trasa", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                    Label(L10n.t("Trasa"), systemImage: "map")
                     Spacer()
                     Text(trackSummary)
                     Image(systemName: "chevron.right").font(.caption2)
@@ -133,20 +238,21 @@ struct LiveView: View {
             }
             .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .frame(maxHeight: fill ? .infinity : nil)
         }
         .buttonStyle(.plain)
     }
 
     private var trackSummary: String {
         let count = recorder.liveTrack.points.count
-        guard count > 1 else { return "čekám na fixy" }
-        guard let flight = recorder.currentFlight else { return "\(count) bodů" }
-        return "\(count) bodů · \(Units.distanceLabel(flight.distance))"
+        guard count > 1 else { return L10n.t("čekám na fixy") }
+        guard let flight = recorder.currentFlight else { return "\(count) \(L10n.t("bodů"))" }
+        return "\(count) \(L10n.t("bodů")) · \(Units.distanceLabel(flight.distance))"
     }
 
     private var graphCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("PRŮBĚH LETU")
+            Text(L10n.t("PRŮBĚH LETU"))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             FlightGraph(points: recorder.liveTrack.points)
@@ -156,23 +262,95 @@ struct LiveView: View {
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    /// What the phone's own sensors are adding. Worth showing, because it is
-    /// the difference between a jittery AGL and a solid one.
-    private var sensorCard: some View {
+    /// Shown while the aircraft is on the surface: a 3D view of where it points.
+    private var showsApron: Bool {
+        let phase = recorder.snapshot.phase
+        return phase == .onGround || phase == .taxi || phase == .takeoffRoll
+    }
+
+    private var apronCard: some View {
+        let track: Double? = location.lastFix.flatMap { fix -> Double? in
+            fix.course >= 0 ? fix.course : nil
+        }
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.t("Letadlo na stanovišti"))
+                .font(.subheadline.weight(.semibold))
+            AircraftView(track: track, groundSpeed: max(0, recorder.snapshot.speed))
+                .frame(height: 200)
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+            Text(L10n.t("Pohled na letadlo se točí podle kurzu z GPS."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    // MARK: - Cards
+
+    private var permissionNotice: some View {
+        Group {
+            if location.authorization == .authorizedWhenInUse {
+                Text(L10n.t("Povolení je jen „Při používání“ — se zhasnutým displejem se nezaznamenává. V Nastavení iOS přepni na „Vždy“."))
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+            }
+            if location.authorization == .denied || location.authorization == .restricted {
+                Text(L10n.t("Poloha je zakázaná. Bez ní aplikace nic nezaznamená — povol ji v Nastavení iOS."))
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private var terrainCard: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label("Senzory telefonu", systemImage: "gauge.with.dots.needle.bottom.50percent")
+                Label(L10n.t("Terén pod letadlem"), systemImage: "mountain.2")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(recorder.motionService.hasBarometer ? "barometr" : "bez barometru")
+                Text(recorder.elevation?.source.label ?? "—")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(
-                        (recorder.motionService.hasBarometer ? Color.green : Color.secondary).opacity(0.18),
-                        in: Capsule()
-                    )
-                    .foregroundStyle(recorder.motionService.hasBarometer ? Color.green : Color.secondary)
+                    .background(terrainColor.opacity(0.18), in: Capsule())
+                    .foregroundStyle(terrainColor)
+            }
+            Text(recorder.elevation.map { "\(Int($0.meters.rounded())) m n. m. (\(Units.feetLabel($0.meters)))" }
+                 ?? L10n.t("Bez údaje o terénu — detekce jede jen podle rychlosti a stoupání."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            if let airport = recorder.nearestAirport {
+                Text("\(L10n.t("Nejbližší letiště:")) \(airport.code) — \(airport.name)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var terrainColor: Color {
+        guard let source = recorder.elevation?.source else { return .gray }
+        return source.rank >= ElevationSource.airport.rank ? .green : .orange
+    }
+
+    private var sensorCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label(L10n.t("Senzory telefonu"), systemImage: "gauge.with.dots.needle.bottom.50percent")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(L10n.t(recorder.motionService.hasBarometer ? "barometr" : "bez barometru"))
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.15), in: Capsule())
+                    .foregroundStyle(.secondary)
             }
             Text(sensorLine)
                 .font(.caption)
@@ -186,87 +364,40 @@ struct LiveView: View {
     private var sensorLine: String {
         if recorder.motionService.baroZeroed {
             let g = recorder.motion.acceleration.map { String(format: "%.2f g", $0) } ?? "—"
-            return "Výška nad zemí měřená barometrem od poslední zastávky. Zrychlení \(g)."
+            return "\(L10n.t("Výška nad zemí měřená barometrem od poslední zastávky. Zrychlení")) \(g)."
         }
         if recorder.motionService.hasBarometer {
-            return "Barometr se vynuluje, až letadlo chvíli postojí. Do té doby jede AGL z GPS."
+            return L10n.t("Barometr se vynuluje, až letadlo chvíli postojí. Do té doby jede AGL z GPS.")
         }
-        return "Tento telefon nemá barometr — AGL se počítá z GPS a terénu."
+        return L10n.t("Tento telefon nemá barometr — AGL se počítá z GPS a terénu.")
     }
 
-    // MARK: - Terrain
-
-    private var terrainCard: some View {
+    private func flightCard(_ flight: Flight) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Label("Terén pod letadlem", systemImage: "mountain.2")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Text(recorder.elevation?.source.label ?? "neznámá")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(sourceColor.opacity(0.18), in: Capsule())
-                    .foregroundStyle(sourceColor)
-            }
-            Text(recorder.elevation.map { "\(Int($0.meters.rounded())) m n. m. (\(Units.feetLabel($0.meters)))" }
-                 ?? "Bez údaje o terénu — detekce jede jen podle rychlosti a stoupání.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            if let airport = recorder.nearestAirport {
-                Text("Nejbližší letiště: \(airport.code) — \(airport.name)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
-    }
-
-    private var sourceColor: Color {
-        switch recorder.elevation?.source ?? .unavailable {
-        case .groundReference, .airport: return .green
-        case .online, .cache: return .blue
-        case .unavailable: return .red
-        }
-    }
-
-    // MARK: - Cards
-
-    private func currentFlightCard(_ flight: Flight) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Probíhá let", systemImage: "airplane.departure")
-                .font(.subheadline.weight(.semibold))
-            Text("Vzlet \(flight.takeoff.time.formatted(date: .omitted, time: .standard)) — \(flight.departureLabel)")
-                .font(.callout)
-            // Ticks once a second so the airborne time is live, not frozen at
-            // whatever moment SwiftUI last redrew the view.
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Let \(Units.durationLabel(context.date.timeIntervalSince(flight.takeoff.time))) · \(Units.distanceLabel(flight.distance))")
+                    Text("\(L10n.t("Let")) \(Units.durationLabel(context.date.timeIntervalSince(flight.takeoff.time))) · \(Units.distanceLabel(flight.distance))")
                     if let offBlocks = flight.offBlocks {
-                        Text("Blok \(Units.durationLabel(context.date.timeIntervalSince(offBlocks.time))) · pojíždění \(Units.durationLabel(flight.taxiOut))")
+                        Text("\(L10n.t("Blok")) \(Units.durationLabel(context.date.timeIntervalSince(offBlocks.time))) · \(L10n.t("Pojíždění")) \(Units.durationLabel(flight.taxiOut))")
                     }
                 }
-                .font(.caption)
+                .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+        .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    private func lastEventCard(_ event: FlightEvent) -> some View {
+    private func eventCard(_ event: FlightEvent) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Poslední událost")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text("\(event.kind.label) · \(event.time.formatted(date: .abbreviated, time: .standard))")
-                .font(.callout.weight(.semibold))
-            Text("\(event.airport ?? Units.coordinateLabel(event.coordinate)) · \(Units.knotsLabel(event.speed)) · AGL \(Units.feetLabel(event.agl)) · \(event.confidence.label)")
-                .font(.caption)
+            Text(L10n.t("Poslední událost"))
+                .font(.subheadline.weight(.semibold))
+            Text("\(L10n.t(event.kind.label)) · \(event.time.formatted(date: .omitted, time: .standard))")
+                .font(.callout.monospacedDigit())
+            Text("\(Units.knotsLabel(event.speed)) · AGL \(Units.feetLabel(event.agl))")
+                .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -274,45 +405,42 @@ struct LiveView: View {
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    // MARK: - Controls
+    // MARK: - Keys
 
-    private var controls: some View {
-        VStack(spacing: 12) {
-            Button {
+    /// The fixed operator row: EMER, MENU, record, DIRECT. Same order and place
+    /// on both devices.
+    private var keyBar: some View {
+        HStack(spacing: 8) {
+            KeyButton(title: "EMER", tint: .red) { presented = .emergency }
+            KeyButton(title: "MENU", tint: .gray) { presented = .menu }
+            KeyButton(
+                title: recorder.isRecording ? L10n.t("Zastavit") : L10n.t("Záznam"),
+                tint: recorder.isRecording ? .red : .green
+            ) {
                 recorder.isRecording ? recorder.stop() : recorder.start()
-            } label: {
-                Label(
-                    recorder.isRecording ? "Zastavit záznam" : "Spustit záznam",
-                    systemImage: recorder.isRecording ? "stop.circle" : "record.circle"
-                )
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(recorder.isRecording ? .red : .orange)
+            KeyButton(title: "DIRECT", tint: .orange) { presented = .direct }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .background(.bar)
+    }
 
-            if location.authorization == .authorizedWhenInUse {
-                Text("Povolení je jen „Při používání“ — se zhasnutým displejem se nezaznamenává. V Nastavení iOS přepni na „Vždy“.")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .multilineTextAlignment(.center)
-            }
-            if location.authorization == .denied || location.authorization == .restricted {
-                Text("Poloha je zakázaná. Bez ní aplikace nic nezaznamená — povol ji v Nastavení iOS.")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-            }
+    private struct KeyButton: View {
+        var title: String
+        var tint: Color
+        var action: () -> Void
 
-            HStack(spacing: 12) {
-                Button("Ručně: vzlet") { recorder.logManualEvent(.takeoff) }
-                    .buttonStyle(.bordered)
+        var body: some View {
+            Button(action: action) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
                     .frame(maxWidth: .infinity)
-                Button("Ručně: přistání") { recorder.logManualEvent(.landing) }
-                    .buttonStyle(.bordered)
-                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .foregroundStyle(tint)
+                    .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 12))
             }
-            .disabled(location.lastFix == nil)
+            .buttonStyle(.plain)
         }
     }
 }

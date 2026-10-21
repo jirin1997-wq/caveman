@@ -24,6 +24,10 @@ odlet. Musí platit obojí najednou.
 | **Deník** | Doba letu, odlet/přílet, max. výška, uletěná vzdálenost, nalétané hodiny |
 | **Živá mapa** | Trasa se kreslí **při letu**, ne až potom. Na celou obrazovku i jako karta |
 | **Offline mapa** | Stažené dlaždice v telefonu — mapa funguje i tam, kde není signál |
+| **Rozložení jako Garmin** | Pásky rychlosti a výšky, variometr, mapa, pevná řada kláves EMER · MENU · záznam · DIRECT |
+| **Direct-to a EMER** | Cíl letu s kurzem a vzdáleností, seznam nejbližších ploch |
+| **3D letadlo na stanovišti** | Letadlo se točí podle kurzu z GPS a při pojíždění se točí vrtule a kola |
+| **Čeština a English** | Přepínání jazyka v Nastavení |
 | **Graf průběhu** | Rychlost, stoupání/klesání a výška nad zemí na společné časové ose |
 | **Graf ↔ mapa** | Potáhnutím po grafu se na mapě ukáže, kde letadlo v tu chvíli bylo |
 | **Poznámka k letu** | Registrace a volný text, co aplikace sama vědět nemůže |
@@ -147,6 +151,43 @@ naopak **nikdy nepřepíše** publikovanou elevaci z datasetu — ruční GPS na
 není.
 
 ---
+
+## Rozložení přístrojů a klávesy
+
+Obrazovka Let je poskládaná podle Garminu AXIS. Na iPhonu jsou části pod sebou,
+na iPadu ve třech sloupcích. Klávesy jsou dole na stejném místě na obou zařízeních.
+
+- **Pásky**: rychlost (kt) vlevo a výška MSL (ft) vpravo, s hodnotou uprostřed.
+  Mezi nimi variometr (fpm) od −1500 do +1500.
+- **Direct-to lišta** nad mapou: cíl, kurz (°), vzdálenost (NM) a odhad doby,
+  když letadlo jede. Klepnutím se vybírá cíl.
+- **Mapa** s čárou letadlo–cíl, když je cíl zvolen.
+- **Letadlo na stanovišti**: trojrozměrný model, který se otáčí podle kurzu z GPS.
+  Vrtule se točí a kola se kutálejí podle rychlosti po zemi. Je postavený z
+  primitiv v SceneKitu, takže aplikace nepotřebuje žádný soubor s modelem.
+  Ukazuje směr, ne sklon ani náklon.
+- **Klávesy**:
+  - **EMER** — nejbližší plochy do 60 km, seřazené podle vzdálenosti, s kurzem
+    a výškou. Klepnutím na plochu se stane cílem.
+  - **MENU** — ruční zápis vzletu a přistání.
+  - **Záznam / STOP** — spuštění a zastavení záznamu.
+  - **DIRECT** — výběr letiště, ke kterému letíš, s hledáním.
+
+**Telefon není certifikovaný letecký přístroj.** Tohle je doplněk k záznamu
+a navigaci k letišti. Nenahrazuje přístroje v letadle a není jediným zdrojem
+informací o výšce nad terénem nebo o směru.
+
+**Co Garmin umí a telefon ne.** Data motoru, počasí, provoz (ADS-B), letecké
+mapy s frekvencemi a délkami drah a letový plán s úseky nejsou v této verzi.
+Umělý horizont se nepřidává, protože pozice telefonu v letadle není známá.
+
+## Jazyk
+
+Nastavení → Jazyk: Podle systému, Čeština, nebo English. Čeština je zdrojový
+jazyk a anglický překlad je v `Localization+English.swift`. Přeložené zatím jsou
+hlavní obrazovka, záložky, klávesy, obrazovky EMER, DIRECT a MENU a volba jazyka.
+Zbytek nastavení a deníku zůstává česky. Chybějící překlad se zobrazí česky,
+takže aplikace nespadne. `tools/check-translations.py` ukáže, co chybí.
 
 ## Offline mapa
 

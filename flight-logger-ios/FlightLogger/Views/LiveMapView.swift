@@ -27,6 +27,8 @@ struct LiveTrackMap: View {
     /// Marks where the flight started, once there is a flight.
     var departure: Coordinate?
     var marked: Coordinate?
+    /// The Direct-to field, drawn as a dashed line from the aircraft.
+    var target: Coordinate? = nil
 
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var tiles: TileStore
@@ -41,7 +43,8 @@ struct LiveTrackMap: View {
             departure: departure,
             arrival: nil,
             marked: marked,
-            staticRegion: nil
+            staticRegion: nil,
+            target: target
         )
         .overlay(alignment: .bottomTrailing) {
             MapAttribution(source: settings.tileSource)
