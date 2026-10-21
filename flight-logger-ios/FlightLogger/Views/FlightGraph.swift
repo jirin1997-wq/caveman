@@ -46,7 +46,7 @@ struct FlightGraph: View {
 
     var body: some View {
         if points.count < 2 {
-            Text("Graf se kreslí od druhého bodu trasy.")
+            Text(L10n.t("Graf se kreslí od druhého bodu trasy."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)

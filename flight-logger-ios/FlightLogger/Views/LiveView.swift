@@ -11,6 +11,8 @@ struct LiveView: View {
 
     @EnvironmentObject private var recorder: FlightRecorder
     @EnvironmentObject private var location: LocationService
+    /// Observed so that switching the language in Settings redraws this screen.
+    @EnvironmentObject private var settings: AppSettings
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var presented: Sheet?
@@ -222,7 +224,7 @@ struct LiveView: View {
                     target: recorder.directTarget?.coordinate
                 )
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: 230, maxHeight: fill ? .infinity : 230)
+                .frame(minHeight: 230, maxHeight: fill ? CGFloat.infinity : CGFloat(230))
                 .allowsHitTesting(false)
 
                 HStack {
@@ -238,7 +240,7 @@ struct LiveView: View {
             }
             .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .frame(maxHeight: fill ? .infinity : nil)
+            .frame(maxHeight: fill ? CGFloat.infinity : nil)
         }
         .buttonStyle(.plain)
     }
